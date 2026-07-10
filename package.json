@@ -1,0 +1,21 @@
+{
+  "name": "reactcanvas",
+  "displayName": "ReactCanvas",
+  "publisher": "debabrata100",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/debabrata100/reactcanvas.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/debabrata100/reactcanvas/issues"
+  },
+  "homepage": "https://github.com/debabrata100/reactcanvas#readme",
+  "description": ""
+}
