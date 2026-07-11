@@ -3,7 +3,6 @@
 A live React playground and preview for `.jsx` / `.tsx` files, right inside VS Code. No dev server, no project build setup — open a component file and see it render.
 
 ![Usage demo](images/preview.gif)
-*(GIF placeholder — see `images/README.md`)*
 
 ## Features
 
