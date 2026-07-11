@@ -1,0 +1,50 @@
+.counter {
+  font-family: system-ui, sans-serif;
+  max-width: 420px;
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.stats {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.4rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.15);
+  cursor: pointer;
+}
+
+button:hover {
+  background: rgba(99, 102, 241, 0.3);
+}

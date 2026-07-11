@@ -1,21 +1,92 @@
 {
   "name": "reactcanvas",
   "displayName": "ReactCanvas",
+  "description": "Live React playground and preview for .jsx/.tsx files inside VS Code.",
+  "version": "0.1.0",
   "publisher": "debabrata100",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "license": "MIT",
+  "icon": "images/icon.png",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/debabrata100/reactcanvas.git"
   },
-  "author": "",
-  "license": "ISC",
   "bugs": {
     "url": "https://github.com/debabrata100/reactcanvas/issues"
   },
   "homepage": "https://github.com/debabrata100/reactcanvas#readme",
-  "description": ""
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "react",
+    "jsx",
+    "tsx",
+    "preview",
+    "playground",
+    "live reload",
+    "component"
+  ],
+  "activationEvents": [
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "reactcanvas.openPreview",
+        "title": "Open Preview",
+        "category": "ReactCanvas",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "reactcanvas.selectReactVersion",
+        "title": "Select React Version",
+        "category": "ReactCanvas"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "reactcanvas.openPreview",
+          "when": "resourceExtname == .jsx || resourceExtname == .tsx",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build:prod",
+    "build": "node esbuild.mjs",
+    "build:prod": "node esbuild.mjs --production",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "compile-tests": "tsc -p ./",
+    "lint": "eslint src",
+    "pretest": "npm run compile-tests && npm run build",
+    "test:unit": "mocha out/test/unit/**/*.test.js",
+    "test:integration": "node out/test/runTest.js",
+    "test": "npm run pretest && npm run test:unit && npm run test:integration",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@babel/standalone": "^7.24.0",
+    "@types/babel__standalone": "^7.1.7",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.4.0",
+    "@vscode/vsce": "^3.1.0",
+    "esbuild": "^0.21.0",
+    "esbuild-wasm": "^0.21.0",
+    "eslint": "^9.5.0",
+    "glob": "^10.4.0",
+    "mocha": "^10.4.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0"
+  }
 }

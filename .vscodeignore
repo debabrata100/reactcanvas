@@ -1,0 +1,20 @@
+# Everything is bundled into dist/ — keep the .vsix minimal.
+.vscode/**
+.vscode-test/**
+.github/**
+src/**
+out/**
+node_modules/**
+images/README.md
+esbuild.mjs
+eslint.config.mjs
+tsconfig.json
+.gitignore
+.nvmrc
+**/*.map
+**/*.ts
+**/*.vsix
+npm-debug.log*
+
+# Keep:
+# dist/** (bundle + esbuild.wasm), images/icon.png, README.md, LICENSE, package.json

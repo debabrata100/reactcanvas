@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # npm ci needs a committed package-lock.json; fall back to install
+      # until one exists. (Re-add `cache: npm` to setup-node then, too.)
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Compile tests
+        run: npm run compile-tests
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: xvfb-run -a npm run test:integration
+
+      - name: Package .vsix
+        run: npx @vscode/vsce package --out reactcanvas.vsix
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reactcanvas-vsix
+          path: reactcanvas.vsix
