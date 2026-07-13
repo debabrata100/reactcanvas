@@ -51,6 +51,8 @@ I built this because I got tired of spinning up a whole Vite project just to che
 3. Edit — the preview reloads as you type.
 4. Click the React version badge (in the preview toolbar or status bar) to switch React versions.
 
+No file handy? Run **ReactCanvas: New React Scratch File** — it opens an untitled JSX or TSX file pre-filled with a starter component and the preview already attached. Nothing touches your disk until you decide to save.
+
 > The preview loads React from [esm.sh](https://esm.sh), so it needs network access.
 
 ## Requirements
