@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Planned
+- Preview for unsaved (untitled) files, plus a `ReactCanvas: New React Scratch File` command that opens a ready-to-edit component with the live preview attached (Quokka-style scratchpad)
 - Multi-file import resolution (follow relative imports and bundle them into the preview)
 - Import maps for arbitrary npm packages via esm.sh
 - Source-mapped runtime stack traces
