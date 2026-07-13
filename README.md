@@ -2,6 +2,7 @@
 
 [![Marketplace](https://img.shields.io/visual-studio-marketplace/v/debabrata100.reactcanvas?label=VS%20Code%20Marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=debabrata100.reactcanvas)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/debabrata100.reactcanvas)](https://marketplace.visualstudio.com/items?itemName=debabrata100.reactcanvas)
+[![Open VSX](https://img.shields.io/open-vsx/v/debabrata100/reactcanvas?label=Open%20VSX&color=a60ee5)](https://open-vsx.org/extension/debabrata100/reactcanvas)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A live React playground and preview for `.jsx` / `.tsx` files, right inside VS Code. No dev server, no project build setup — open a component file and see it render.
@@ -14,7 +15,11 @@ A live React playground and preview for `.jsx` / `.tsx` files, right inside VS C
 code --install-extension debabrata100.reactcanvas
 ```
 
+Also available on [Open VSX](https://open-vsx.org/extension/debabrata100/reactcanvas) for VSCodium, Gitpod, and other VS Code-compatible editors.
+
 ![Usage demo](images/preview.gif)
+
+I built this because I got tired of spinning up a whole Vite project just to check what one component looks like. Open the file, hit preview, done.
 
 ## Features
 
