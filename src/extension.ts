@@ -49,7 +49,8 @@ export default function Scratch() {
 }
 `;
 
-const TSX_TEMPLATE = `import { useState } from 'react';
+const TSX_TEMPLATE = `// @ts-ignore — scratch files live outside a project, so 'react' types may not resolve; the preview works regardless
+import { useState } from 'react';
 
 interface GreetingProps {
   name: string;
