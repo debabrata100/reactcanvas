@@ -48,3 +48,21 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx @vscode/vsce publish --packagePath reactcanvas-${{ github.ref_name }}.vsix
+
+      - name: Check for Open VSX token
+        id: ovsx
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -n "$OVSX_PAT" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::OVSX_PAT secret not set — skipping Open VSX publish."
+          fi
+
+      - name: Publish to Open VSX
+        if: steps.ovsx.outputs.present == 'true'
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish reactcanvas-${{ github.ref_name }}.vsix -p "$OVSX_PAT"
