@@ -6,8 +6,6 @@
 
 A live React playground and preview for `.jsx` / `.tsx` files, right inside VS Code. No dev server, no project build setup — open a component file and see it render.
 
-![Usage demo](images/preview.gif)
-
 ## Install
 
 **[Install from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=debabrata100.reactcanvas)** — or search for “ReactCanvas” in the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`), or from the command line:
@@ -15,6 +13,8 @@ A live React playground and preview for `.jsx` / `.tsx` files, right inside VS C
 ```bash
 code --install-extension debabrata100.reactcanvas
 ```
+
+![Usage demo](images/preview.gif)
 
 ## Features
 
