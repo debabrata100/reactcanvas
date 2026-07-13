@@ -5,7 +5,20 @@ import { HostMessage, ReactVersion, WebviewMessage } from './messages';
 const DEBOUNCE_MS = 300;
 
 function isPreviewable(doc: vscode.TextDocument | undefined): doc is vscode.TextDocument {
-  return !!doc && /\.(jsx|tsx)$/i.test(doc.fileName) && doc.uri.scheme !== 'git';
+  if (!doc || doc.uri.scheme === 'git') {
+    return false;
+  }
+  // languageId covers untitled (never-saved) documents, which have no file
+  // extension, as well as files whose language was set manually.
+  return (
+    /\.(jsx|tsx)$/i.test(doc.fileName) ||
+    doc.languageId === 'javascriptreact' ||
+    doc.languageId === 'typescriptreact'
+  );
+}
+
+function loaderOf(doc: vscode.TextDocument): 'jsx' | 'tsx' {
+  return doc.languageId === 'typescriptreact' || /\.tsx$/i.test(doc.fileName) ? 'tsx' : 'jsx';
 }
 
 function getNonce(): string {
@@ -169,7 +182,8 @@ export class PreviewPanel {
     if (!this.target) {
       this.post({
         type: 'no-target',
-        reason: 'Open a .jsx or .tsx file, then run "ReactCanvas: Open Preview".',
+        reason:
+          'Open a .jsx or .tsx file, then run "ReactCanvas: Open Preview" — or start from scratch with "ReactCanvas: New React Scratch File".',
       });
       return;
     }
@@ -178,7 +192,7 @@ export class PreviewPanel {
     try {
       const transpiler = await this.getTranspiler();
       const [result, css] = await Promise.all([
-        transpiler.transpile(this.target.getText(), { filename: fileName }),
+        transpiler.transpile(this.target.getText(), { filename: fileName, loader: loaderOf(this.target) }),
         this.readCss(),
       ]);
       if (seq !== this.updateSeq) {

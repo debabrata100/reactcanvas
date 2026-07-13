@@ -26,6 +26,7 @@ I built this because I got tired of spinning up a whole Vite project just to che
 | Feature | Details |
 | --- | --- |
 | Live preview | `ReactCanvas: Open Preview` opens a panel beside your editor |
+| Scratch files | `ReactCanvas: New React Scratch File` — a ready-to-edit component with live preview, no file on disk needed; unsaved/untitled files preview too |
 | In-memory transpile | esbuild-wasm (with automatic `@babel/standalone` fallback) — no Node child processes, no bundler config |
 | Live reload | Re-renders ~300 ms after you stop typing |
 | React version selector | Switch between React 17, 18, and 19 (`ReactCanvas: Select React Version`), loaded from esm.sh via import maps; persisted per workspace and shown in the status bar |

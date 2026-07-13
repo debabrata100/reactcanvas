@@ -5,8 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+- **Scratch files (Quokka-style)**: preview now works for unsaved (untitled) documents — target detection uses the document language, not just the file extension.
+- New command `ReactCanvas: New React Scratch File` — opens an untitled JSX or TSX document pre-filled with a starter component and the live preview already attached. No file on disk needed.
+- The editor-title preview button now appears for any document with a React language mode, including untitled ones.
+
 ### Planned
-- Preview for unsaved (untitled) files, plus a `ReactCanvas: New React Scratch File` command that opens a ready-to-edit component with the live preview attached (Quokka-style scratchpad)
 - Multi-file import resolution (follow relative imports and bundle them into the preview)
 - Import maps for arbitrary npm packages via esm.sh
 - Source-mapped runtime stack traces

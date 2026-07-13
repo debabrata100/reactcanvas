@@ -34,6 +34,44 @@ export function getReactVersion(context: vscode.ExtensionContext): ReactVersion 
   return context.workspaceState.get<ReactVersion>(VERSION_STATE_KEY, DEFAULT_REACT_VERSION);
 }
 
+const JSX_TEMPLATE = `import { useState } from 'react';
+
+export default function Scratch() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div style={{ fontFamily: 'system-ui', textAlign: 'center', marginTop: '3rem' }}>
+      <h1>Scratch pad</h1>
+      <button onClick={() => setCount(count + 1)}>Clicked {count} times</button>
+      <p>Edit this file — the preview updates as you type. No need to save.</p>
+    </div>
+  );
+}
+`;
+
+const TSX_TEMPLATE = `import { useState } from 'react';
+
+interface GreetingProps {
+  name: string;
+}
+
+function Greeting({ name }: GreetingProps) {
+  return <h1>Hello, {name}!</h1>;
+}
+
+export default function Scratch() {
+  const [count, setCount] = useState<number>(0);
+
+  return (
+    <div style={{ fontFamily: 'system-ui', textAlign: 'center', marginTop: '3rem' }}>
+      <Greeting name="ReactCanvas" />
+      <button onClick={() => setCount(count + 1)}>Clicked {count} times</button>
+      <p>Edit this file — the preview updates as you type. No need to save.</p>
+    </div>
+  );
+}
+`;
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('ReactCanvas');
   context.subscriptions.push(output);
@@ -52,6 +90,22 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('reactcanvas.openPreview', async () => {
       PreviewPanel.createOrShow(context, () => getTranspiler(context, output), () => getReactVersion(context));
+    }),
+
+    vscode.commands.registerCommand('reactcanvas.newScratchFile', async () => {
+      const picked = await vscode.window.showQuickPick(
+        [
+          { label: 'JSX', description: 'JavaScript React scratch file', language: 'javascriptreact', content: JSX_TEMPLATE },
+          { label: 'TSX', description: 'TypeScript React scratch file', language: 'typescriptreact', content: TSX_TEMPLATE },
+        ],
+        { placeHolder: 'Language for the scratch file' }
+      );
+      if (!picked) {
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument({ language: picked.language, content: picked.content });
+      await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
+      await vscode.commands.executeCommand('reactcanvas.openPreview');
     }),
 
     vscode.commands.registerCommand('reactcanvas.selectReactVersion', async () => {

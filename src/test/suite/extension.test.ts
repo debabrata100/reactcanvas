@@ -21,13 +21,16 @@ describe('ReactCanvas extension', function () {
     assert.strictEqual(extension.isActive, true);
   });
 
-  it('registers both commands', async () => {
+  it('registers all commands', async () => {
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes('reactcanvas.openPreview'), 'openPreview registered');
     assert.ok(commands.includes('reactcanvas.selectReactVersion'), 'selectReactVersion registered');
+    assert.ok(commands.includes('reactcanvas.newScratchFile'), 'newScratchFile registered');
   });
 
-  it('opens the preview panel for a JSX document without throwing', async () => {
+  it('opens the preview panel for an untitled JSX document without throwing', async () => {
+    // Untitled documents have no file extension — this exercises the
+    // languageId-based target detection used by scratch files.
     const doc = await vscode.workspace.openTextDocument({
       language: 'javascriptreact',
       content: 'export default function App() { return <h1>Hi</h1>; }\n',
@@ -36,6 +39,16 @@ describe('ReactCanvas extension', function () {
     await vscode.commands.executeCommand('reactcanvas.openPreview');
     // The command resolves synchronously after creating the panel; give the
     // webview a moment to initialize before the host shuts down.
+    await new Promise((r) => setTimeout(r, 500));
+  });
+
+  it('opens the preview panel for an untitled TSX document without throwing', async () => {
+    const doc = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: 'export default function App(): JSX.Element { return <h1>Hi</h1>; }\n',
+    });
+    await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand('reactcanvas.openPreview');
     await new Promise((r) => setTimeout(r, 500));
   });
 });

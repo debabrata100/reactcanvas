@@ -83,6 +83,14 @@ function commonSuite(name: string, make: () => Promise<Transpiler>): void {
       );
     });
 
+    it('honors an explicit loader for extensionless (untitled) files', async () => {
+      // "Untitled-1" has no extension; without the override this TSX
+      // source would be parsed as JSX and fail on the interface keyword.
+      const result = await transpiler.transpile(TSX_SOURCE, { filename: 'Untitled-1', loader: 'tsx' });
+      assert.ok(!result.code.includes('interface'), 'TS types are stripped');
+      assert.ok(keepsDefaultExport(result.code));
+    });
+
     it('supports multiple components in one file', async () => {
       const source = `
         const Item = ({ x }) => <li>{x}</li>;

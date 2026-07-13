@@ -28,6 +28,11 @@ export class TranspileError extends Error {
 export interface TranspileOptions {
   /** File name, used for loader detection and error messages. */
   filename: string;
+  /**
+   * Explicit loader override. Needed for untitled (never-saved) documents,
+   * whose names ("Untitled-1") carry no extension to sniff.
+   */
+  loader?: 'jsx' | 'tsx';
 }
 
 export interface TranspileResult {
@@ -42,8 +47,8 @@ export interface Transpiler {
   transpile(source: string, options: TranspileOptions): Promise<TranspileResult>;
 }
 
-function loaderFor(filename: string): 'jsx' | 'tsx' {
-  return /\.tsx$/i.test(filename) ? 'tsx' : 'jsx';
+function loaderFor(options: TranspileOptions): 'jsx' | 'tsx' {
+  return options.loader ?? (/\.tsx$/i.test(options.filename) ? 'tsx' : 'jsx');
 }
 
 /**
@@ -98,7 +103,7 @@ export function createEsbuildTranspiler(wasmModule: WebAssembly.Module): Transpi
       await initEsbuild(wasmModule);
       try {
         const result = await esbuild.transform(stripCssImports(source), {
-          loader: loaderFor(options.filename),
+          loader: loaderFor(options),
           format: 'esm',
           target: 'es2020',
           jsx: 'automatic',
@@ -141,7 +146,7 @@ export function createBabelTranspiler(): Transpiler {
       // Lazy require keeps the (large) babel bundle out of the startup path.
       const babel: typeof import('@babel/standalone') = require('@babel/standalone');
       const presets: Array<[string, Record<string, unknown>]> = [['react', { runtime: 'automatic' }]];
-      if (loaderFor(options.filename) === 'tsx') {
+      if (loaderFor(options) === 'tsx') {
         presets.push(['typescript', { isTSX: true, allExtensions: true }]);
       }
       try {
