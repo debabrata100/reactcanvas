@@ -4,6 +4,7 @@
  * NEVER executes in this document.
  */
 import type { HostMessage, ReactVersion } from '../messages';
+import { serializeConsoleArg } from './consoleSerialize';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -16,10 +17,12 @@ const vscode = acquireVsCodeApi();
 const appEl = document.getElementById('app') as HTMLElement;
 const nonce = appEl.dataset.nonce ?? '';
 
+type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
+
 /** Message posted by the loader script inside the iframe. */
 interface IframeMessage {
   source: 'reactcanvas-iframe';
-  type: 'rendered' | 'runtime-error' | 'no-component';
+  type: 'rendered' | 'runtime-error' | 'no-component' | 'console';
   message?: string;
   stack?: string;
   componentStack?: string;
@@ -27,6 +30,8 @@ interface IframeMessage {
   column?: number;
   exports?: string[];
   component?: string;
+  level?: ConsoleLevel;
+  text?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +78,42 @@ style.textContent = `
     display: flex; align-items: center; justify-content: center; height: 100%;
     color: var(--vscode-descriptionForeground); font-size: 13px; text-align: center; padding: 0 24px;
   }
+  .rc-toolbar button {
+    font: inherit; font-size: 11px; color: var(--vscode-foreground);
+    background: transparent; border: 1px solid var(--vscode-panel-border, rgba(127,127,127,0.4));
+    border-radius: 4px; padding: 1px 8px; cursor: pointer;
+  }
+  .rc-toolbar button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,0.2)); }
+  .rc-console {
+    flex: 0 0 auto; display: none; flex-direction: column;
+    height: 180px; min-height: 0;
+    border-top: 1px solid var(--vscode-panel-border, rgba(127,127,127,0.35));
+    background: var(--vscode-panel-background, var(--vscode-editor-background));
+  }
+  .rc-console.visible { display: flex; }
+  .rc-console-header {
+    display: flex; align-items: center; gap: 8px; padding: 3px 10px; flex: 0 0 auto;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--vscode-descriptionForeground); user-select: none;
+  }
+  .rc-console-log {
+    flex: 1 1 auto; overflow-y: auto; padding: 2px 0;
+    font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5;
+  }
+  .rc-console-empty { padding: 6px 10px; color: var(--vscode-descriptionForeground); font-style: italic; }
+  .rc-entry {
+    display: flex; gap: 8px; padding: 2px 10px; white-space: pre-wrap; word-break: break-word;
+    border-bottom: 1px solid var(--vscode-panel-border, rgba(127,127,127,0.12));
+  }
+  .rc-entry .rc-level { flex: 0 0 auto; opacity: 0.6; text-transform: uppercase; font-size: 10px; padding-top: 2px; min-width: 34px; }
+  .rc-entry.warn { color: var(--vscode-editorWarning-foreground, #cca700); }
+  .rc-entry.error { color: var(--vscode-errorForeground, #f48771); }
+  .rc-entry.debug { opacity: 0.75; }
+  .rc-entry .rc-count {
+    flex: 0 0 auto; align-self: flex-start; margin-left: auto;
+    background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
+    border-radius: 8px; padding: 0 6px; font-size: 10px;
+  }
 `;
 document.head.appendChild(style);
 
@@ -81,11 +122,20 @@ appEl.innerHTML = `
     <span class="rc-file"></span>
     <span class="rc-engine"></span>
     <span style="flex:1"></span>
+    <button class="rc-console-toggle" type="button" title="Toggle console output">Console</button>
     <span class="rc-version" title="Click to change React version"></span>
   </div>
   <div class="rc-stage">
     <div class="rc-empty">Waiting for a .jsx or .tsx file…</div>
     <div class="rc-overlay"><h2></h2><div class="rc-body"></div></div>
+  </div>
+  <div class="rc-console">
+    <div class="rc-console-header">
+      <span>Console</span>
+      <span style="flex:1"></span>
+      <button class="rc-console-clear" type="button">Clear</button>
+    </div>
+    <div class="rc-console-log"><div class="rc-console-empty">No console output yet.</div></div>
   </div>
 `;
 
@@ -101,6 +151,84 @@ const overlayBody = overlayEl.querySelector('.rc-body') as HTMLElement;
 versionEl.addEventListener('click', () => vscode.postMessage({ type: 'select-version' }));
 
 let iframe: HTMLIFrameElement | undefined;
+
+// ---------------------------------------------------------------------------
+// Console panel
+// ---------------------------------------------------------------------------
+
+const consoleEl = appEl.querySelector('.rc-console') as HTMLElement;
+const consoleLogEl = appEl.querySelector('.rc-console-log') as HTMLElement;
+const consoleToggleEl = appEl.querySelector('.rc-console-toggle') as HTMLButtonElement;
+const consoleClearEl = appEl.querySelector('.rc-console-clear') as HTMLButtonElement;
+
+let consoleOpen = false;
+let entryCount = 0;
+/** Last entry, tracked so repeated identical logs collapse into a count. */
+let lastEntry: { level: ConsoleLevel; text: string; el: HTMLElement; count: number } | undefined;
+
+function updateConsoleToggle(): void {
+  consoleToggleEl.textContent = entryCount > 0 ? `Console (${entryCount})` : 'Console';
+}
+
+function setConsoleOpen(open: boolean): void {
+  consoleOpen = open;
+  consoleEl.classList.toggle('visible', open);
+}
+
+function clearConsole(): void {
+  entryCount = 0;
+  lastEntry = undefined;
+  consoleLogEl.innerHTML = '<div class="rc-console-empty">No console output yet.</div>';
+  updateConsoleToggle();
+}
+
+function appendConsoleEntry(level: ConsoleLevel, text: string): void {
+  // Collapse consecutive duplicates (render loops otherwise flood the panel).
+  if (lastEntry && lastEntry.level === level && lastEntry.text === text) {
+    lastEntry.count += 1;
+    let badge = lastEntry.el.querySelector('.rc-count');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'rc-count';
+      lastEntry.el.appendChild(badge);
+    }
+    badge.textContent = String(lastEntry.count);
+    return;
+  }
+
+  if (entryCount === 0) {
+    consoleLogEl.innerHTML = '';
+  }
+
+  // Stick to the bottom only if the user is already there.
+  const pinned = consoleLogEl.scrollTop + consoleLogEl.clientHeight >= consoleLogEl.scrollHeight - 20;
+
+  const entry = document.createElement('div');
+  entry.className = `rc-entry ${level}`;
+  const levelEl = document.createElement('span');
+  levelEl.className = 'rc-level';
+  levelEl.textContent = level;
+  const textEl = document.createElement('span');
+  textEl.textContent = text; // textContent, never innerHTML: user data
+  entry.append(levelEl, textEl);
+  consoleLogEl.appendChild(entry);
+
+  entryCount += 1;
+  lastEntry = { level, text, el: entry, count: 1 };
+  updateConsoleToggle();
+
+  if (pinned) {
+    consoleLogEl.scrollTop = consoleLogEl.scrollHeight;
+  }
+  // Surface warnings and errors even when the panel is collapsed.
+  if (!consoleOpen && (level === 'error' || level === 'warn')) {
+    setConsoleOpen(true);
+  }
+}
+
+consoleToggleEl.addEventListener('click', () => setConsoleOpen(!consoleOpen));
+consoleClearEl.addEventListener('click', clearConsole);
+updateConsoleToggle();
 
 // ---------------------------------------------------------------------------
 // Overlay
@@ -161,6 +289,31 @@ function buildSrcdoc(code: string, css: string, version: ReactVersion): string {
     import React from 'react';
     ${renderSnippet}
     const post = (m) => window.parent.postMessage(Object.assign({ source: 'reactcanvas-iframe' }, m), '*');
+
+    // --- console capture -------------------------------------------------
+    // The serializer is shared with the chrome and injected by stringifying
+    // it; the iframe is a separate realm with no module loader of its own.
+    const serializeConsoleArg = ${serializeConsoleArg.toString()};
+    let consoleBudget = 500; // guards against render loops flooding the panel
+    for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+      const original = console[level] ? console[level].bind(console) : () => {};
+      console[level] = (...args) => {
+        original(...args);
+        if (consoleBudget <= 0) {
+          return;
+        }
+        consoleBudget -= 1;
+        try {
+          const text = consoleBudget === 0
+            ? 'ReactCanvas: console output limit reached — further messages are suppressed.'
+            : args.map((a) => serializeConsoleArg(a)).join(' ');
+          post({ type: 'console', level: consoleBudget === 0 ? 'warn' : level, text });
+        } catch {
+          post({ type: 'console', level, text: '[unserializable value]' });
+        }
+      };
+    }
+    // ---------------------------------------------------------------------
     window.addEventListener('error', (e) => {
       post({ type: 'runtime-error', message: e.message, stack: e.error && e.error.stack, line: e.lineno, column: e.colno });
     });
@@ -230,6 +383,9 @@ function buildSrcdoc(code: string, css: string, version: ReactVersion): string {
 
 function render(code: string, css: string, version: ReactVersion): void {
   emptyEl.style.display = 'none';
+  // Each render creates a fresh realm, so old output no longer reflects the
+  // running preview (devtools behaves the same way on reload).
+  clearConsole();
   iframe?.remove();
   iframe = document.createElement('iframe');
   // allow-scripts only: no same-origin, no forms, no popups, no top navigation.
@@ -271,6 +427,7 @@ function handleHostMessage(msg: HostMessage): void {
       iframe?.remove();
       iframe = undefined;
       hideOverlay();
+      clearConsole();
       break;
     }
   }
@@ -280,6 +437,9 @@ function handleIframeMessage(msg: IframeMessage): void {
   switch (msg.type) {
     case 'rendered':
       hideOverlay();
+      break;
+    case 'console':
+      appendConsoleEntry(msg.level ?? 'log', msg.text ?? '');
       break;
     case 'runtime-error': {
       const loc = msg.line != null ? `<span class="rc-loc">line ${msg.line}${msg.column != null ? ':' + msg.column : ''} (compiled)</span>\n` : '';

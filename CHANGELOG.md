@@ -3,6 +3,14 @@
 All notable changes to ReactCanvas are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-07-13
+
+### Added
+- **Console panel**: `console.log`/`info`/`warn`/`error`/`debug` from your component now appear in a collapsible panel inside the preview, with level colouring and a Clear button. Toggle it from the Console button in the preview toolbar.
+- Values are formatted devtools-style — objects, arrays, `Map`/`Set`, class instances, DOM nodes, errors with stacks — with circular references, deep nesting and huge collections handled safely.
+- Consecutive duplicate messages collapse into a single row with a repeat count, and output is capped per render so a render loop can't flood the panel.
+- The panel opens automatically when a `warn` or `error` is logged, and clears on each re-render (matching devtools behaviour on reload).
+
 ## [Unreleased]
 
 ### Planned
@@ -31,6 +39,7 @@ Initial release.
 - Theme-aware preview chrome (light/dark).
 - Published to the VS Code Marketplace and Open VSX.
 
-[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/debabrata100/reactcanvas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/debabrata100/reactcanvas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/debabrata100/reactcanvas/releases/tag/v0.1.0

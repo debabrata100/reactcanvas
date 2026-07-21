@@ -30,6 +30,7 @@ I built this because I got tired of spinning up a whole Vite project just to che
 | In-memory transpile | esbuild-wasm (with automatic `@babel/standalone` fallback) — no Node child processes, no bundler config |
 | Live reload | Re-renders ~300 ms after you stop typing |
 | React version selector | Switch between React 17, 18, and 19 (`ReactCanvas: Select React Version`), loaded from esm.sh via import maps; persisted per workspace and shown in the status bar |
+| Console panel | `console.log` & friends appear in a collapsible panel inside the preview — objects, arrays, Maps, errors and circular structures formatted devtools-style |
 | Error overlay | Transpile errors (with line numbers) and runtime errors shown in the preview, not just the console |
 | Hooks & multiple components | `useState`, `useEffect`, etc. work out of the box; the default export is rendered as the root |
 | CSS support | Inline styles, plus a same-name `.css` file next to your component is injected automatically (`Button.jsx` → `Button.css`) |

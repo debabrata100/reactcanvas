@@ -15,6 +15,8 @@ export default function Counter() {
   const [clicks, setClicks] = useState(0);
 
   const bump = (delta) => {
+    // Logged output shows up in the ReactCanvas console panel.
+    console.log('bump', { delta, from: count, to: count + delta });
     setCount(count + delta);
     setClicks(clicks + 1);
   };
