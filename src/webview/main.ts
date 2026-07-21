@@ -86,16 +86,28 @@ style.textContent = `
   .rc-toolbar button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127,127,127,0.2)); }
   .rc-console {
     flex: 0 0 auto; display: none; flex-direction: column;
-    height: 180px; min-height: 0;
+    height: 180px; min-height: 0; position: relative;
     border-top: 1px solid var(--vscode-panel-border, rgba(127,127,127,0.35));
     background: var(--vscode-panel-background, var(--vscode-editor-background));
   }
   .rc-console.visible { display: flex; }
+  /* Grab strip straddling the top border. */
+  .rc-resize {
+    position: absolute; top: -3px; left: 0; right: 0; height: 7px;
+    cursor: ns-resize; z-index: 2; flex: 0 0 auto;
+  }
+  .rc-resize:hover, .rc-console.resizing .rc-resize {
+    background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder, #007acc));
+    opacity: 0.7;
+  }
+  /* While dragging, keep the pointer glued to the sash. */
+  .rc-console.resizing, .rc-console.resizing * { user-select: none; }
   .rc-console-header {
     display: flex; align-items: center; gap: 8px; padding: 3px 10px; flex: 0 0 auto;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-    color: var(--vscode-descriptionForeground); user-select: none;
+    color: var(--vscode-descriptionForeground); user-select: none; cursor: ns-resize;
   }
+  .rc-console-header button { cursor: pointer; }
   .rc-console-log {
     flex: 1 1 auto; overflow-y: auto; padding: 2px 0;
     font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: 1.5;
@@ -130,9 +142,11 @@ appEl.innerHTML = `
     <div class="rc-overlay"><h2></h2><div class="rc-body"></div></div>
   </div>
   <div class="rc-console">
-    <div class="rc-console-header">
+    <div class="rc-resize" title="Drag to resize — double-click to maximize"></div>
+    <div class="rc-console-header" title="Drag to resize — double-click to maximize">
       <span>Console</span>
       <span style="flex:1"></span>
+      <button class="rc-console-max" type="button" title="Maximize panel">⌃</button>
       <button class="rc-console-clear" type="button">Clear</button>
     </div>
     <div class="rc-console-log"><div class="rc-console-empty">No console output yet.</div></div>
@@ -160,6 +174,30 @@ const consoleEl = appEl.querySelector('.rc-console') as HTMLElement;
 const consoleLogEl = appEl.querySelector('.rc-console-log') as HTMLElement;
 const consoleToggleEl = appEl.querySelector('.rc-console-toggle') as HTMLButtonElement;
 const consoleClearEl = appEl.querySelector('.rc-console-clear') as HTMLButtonElement;
+const consoleMaxEl = appEl.querySelector('.rc-console-max') as HTMLButtonElement;
+const consoleResizeEl = appEl.querySelector('.rc-resize') as HTMLElement;
+const consoleHeaderEl = appEl.querySelector('.rc-console-header') as HTMLElement;
+
+const MIN_CONSOLE_HEIGHT = 60;
+/** Leave at least this much of the preview stage visible. */
+const MIN_STAGE_HEIGHT = 80;
+const DEFAULT_CONSOLE_HEIGHT = 180;
+
+/**
+ * Webview state survives the panel being hidden/restored, so both the last
+ * render and the user's panel layout are persisted together.
+ */
+interface PersistedState {
+  render?: Extract<HostMessage, { type: 'render' }>;
+  ui?: { consoleOpen: boolean; height: number };
+}
+
+const persisted = (vscode.getState() as PersistedState | undefined) ?? {};
+const uiState = persisted.ui ?? { consoleOpen: false, height: DEFAULT_CONSOLE_HEIGHT };
+
+function savePersistedState(): void {
+  vscode.setState({ ...persisted, ui: uiState } satisfies PersistedState);
+}
 
 let consoleOpen = false;
 let entryCount = 0;
@@ -173,6 +211,11 @@ function updateConsoleToggle(): void {
 function setConsoleOpen(open: boolean): void {
   consoleOpen = open;
   consoleEl.classList.toggle('visible', open);
+  uiState.consoleOpen = open;
+  savePersistedState();
+  if (open) {
+    setConsoleHeight(uiState.height);
+  }
 }
 
 function clearConsole(): void {
@@ -226,8 +269,85 @@ function appendConsoleEntry(level: ConsoleLevel, text: string): void {
   }
 }
 
+// --- resize / maximize -----------------------------------------------------
+
+function maxConsoleHeight(): number {
+  return Math.max(MIN_CONSOLE_HEIGHT, appEl.clientHeight - MIN_STAGE_HEIGHT);
+}
+
+/** Height to restore to when un-maximizing; undefined while not maximized. */
+let restoreHeight: number | undefined;
+
+function setConsoleHeight(height: number, persist = true): void {
+  const clamped = Math.min(Math.max(height, MIN_CONSOLE_HEIGHT), maxConsoleHeight());
+  consoleEl.style.height = `${clamped}px`;
+  const maximized = clamped >= maxConsoleHeight() - 1;
+  consoleMaxEl.textContent = maximized ? '⌄' : '⌃';
+  consoleMaxEl.title = maximized ? 'Restore panel size' : 'Maximize panel';
+  if (persist) {
+    uiState.height = clamped;
+    savePersistedState();
+  }
+}
+
+function toggleMaximize(): void {
+  const current = consoleEl.getBoundingClientRect().height;
+  if (current >= maxConsoleHeight() - 1) {
+    setConsoleHeight(restoreHeight ?? DEFAULT_CONSOLE_HEIGHT);
+    restoreHeight = undefined;
+  } else {
+    restoreHeight = current;
+    setConsoleHeight(maxConsoleHeight());
+  }
+}
+
+function beginResize(event: PointerEvent): void {
+  // Ignore drags that start on the header's buttons.
+  if ((event.target as HTMLElement).closest('button')) {
+    return;
+  }
+  event.preventDefault();
+  const startY = event.clientY;
+  const startHeight = consoleEl.getBoundingClientRect().height;
+  const handle = event.currentTarget as HTMLElement;
+  handle.setPointerCapture(event.pointerId);
+  consoleEl.classList.add('resizing');
+
+  const onMove = (move: PointerEvent): void => {
+    // Dragging up (smaller clientY) grows the panel.
+    setConsoleHeight(startHeight + (startY - move.clientY), false);
+  };
+  const onUp = (): void => {
+    handle.releasePointerCapture(event.pointerId);
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onUp);
+    handle.removeEventListener('pointercancel', onUp);
+    consoleEl.classList.remove('resizing');
+    restoreHeight = undefined; // a manual drag defines the new restore point
+    setConsoleHeight(consoleEl.getBoundingClientRect().height);
+  };
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp);
+  handle.addEventListener('pointercancel', onUp);
+}
+
 consoleToggleEl.addEventListener('click', () => setConsoleOpen(!consoleOpen));
 consoleClearEl.addEventListener('click', clearConsole);
+consoleMaxEl.addEventListener('click', toggleMaximize);
+consoleResizeEl.addEventListener('pointerdown', beginResize);
+consoleHeaderEl.addEventListener('pointerdown', beginResize);
+consoleResizeEl.addEventListener('dblclick', toggleMaximize);
+consoleHeaderEl.addEventListener('dblclick', (e) => {
+  if (!(e.target as HTMLElement).closest('button')) {
+    toggleMaximize();
+  }
+});
+// Keep the panel within bounds when the webview itself is resized.
+window.addEventListener('resize', () => {
+  if (consoleOpen) {
+    setConsoleHeight(consoleEl.getBoundingClientRect().height);
+  }
+});
 updateConsoleToggle();
 
 // ---------------------------------------------------------------------------
@@ -401,7 +521,8 @@ function render(code: string, css: string, version: ReactVersion): void {
 function handleHostMessage(msg: HostMessage): void {
   switch (msg.type) {
     case 'render': {
-      vscode.setState(msg);
+      persisted.render = msg;
+      savePersistedState();
       fileEl.textContent = msg.fileName;
       engineEl.textContent = `via ${msg.engine}`;
       versionEl.textContent = `React ${msg.reactVersion}`;
@@ -478,9 +599,12 @@ window.addEventListener('message', (event: MessageEvent) => {
 });
 
 // Restore after the webview is recreated (e.g. tab re-opened).
-const saved = vscode.getState() as Extract<HostMessage, { type: 'render' }> | undefined;
-if (saved && saved.type === 'render') {
-  handleHostMessage(saved);
+setConsoleHeight(uiState.height, false);
+if (uiState.consoleOpen) {
+  setConsoleOpen(true);
+}
+if (persisted.render?.type === 'render') {
+  handleHostMessage(persisted.render);
 }
 
 vscode.postMessage({ type: 'ready' });

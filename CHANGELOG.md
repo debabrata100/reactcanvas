@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Values are formatted devtools-style — objects, arrays, `Map`/`Set`, class instances, DOM nodes, errors with stacks — with circular references, deep nesting and huge collections handled safely.
 - Consecutive duplicate messages collapse into a single row with a repeat count, and output is capped per render so a render loop can't flood the panel.
 - The panel opens automatically when a `warn` or `error` is logged, and clears on each re-render (matching devtools behaviour on reload).
+- **Resizable console**: drag the sash at the top of the panel (or its header) to change its height, double-click to maximize, and use the ⌃/⌄ button to maximize/restore. The panel size and open/closed state persist across sessions.
 
 ## [Unreleased]
 
