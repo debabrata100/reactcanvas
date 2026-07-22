@@ -29,6 +29,7 @@ I built this because I got tired of spinning up a whole Vite project just to che
 | Scratch files | `ReactCanvas: New React Scratch File` — a ready-to-edit component with live preview, no file on disk needed; unsaved/untitled files preview too |
 | In-memory transpile | esbuild-wasm (with automatic `@babel/standalone` fallback) — no Node child processes, no bundler config |
 | Multi-file components | Relative imports are followed and bundled — `import Card from './Card'`, folder `index` files, and imported `.css` all work. Live reload watches the whole graph |
+| npm packages | `import clsx from 'clsx'` just works — third-party packages are loaded from [esm.sh](https://esm.sh) on demand, sharing the preview's React instance. No install step |
 | Live reload | Re-renders ~300 ms after you stop typing |
 | React version selector | Switch between React 17, 18, and 19 (`ReactCanvas: Select React Version`), loaded from esm.sh via import maps; persisted per workspace and shown in the status bar |
 | Console panel | `console.log` & friends appear in a collapsible panel inside the preview — objects, arrays, Maps, errors and circular structures formatted devtools-style. Drag to resize, double-click to maximize; size persists |
@@ -55,7 +56,7 @@ I built this because I got tired of spinning up a whole Vite project just to che
 
 No file handy? Run **ReactCanvas: New React Scratch File** — it opens an untitled JSX or TSX file pre-filled with a starter component and the preview already attached. Nothing touches your disk until you decide to save.
 
-> The preview loads React from [esm.sh](https://esm.sh), so it needs network access.
+> The preview loads React and any npm packages from [esm.sh](https://esm.sh), so it needs network access.
 
 ## Requirements
 
@@ -63,14 +64,15 @@ None. No local React install, no build configuration.
 
 ## Known limitations
 
-- npm package imports other than `react` / `react-dom` are not mapped yet (see Roadmap).
+- npm packages are resolved to their latest version on esm.sh; specific version pinning isn't supported yet.
+- Components can call `fetch` and open WebSockets, but the sandboxed preview sends `Origin: null`, so an API must allow requests from any origin.
 - Circular imports between local modules aren't supported and surface as an error.
 - Runtime error stack traces reference compiled code, not original source lines.
 
 ## Roadmap
 
-- Import maps for arbitrary npm packages via esm.sh.
 - Source-mapped runtime stack traces.
+- Version pinning for npm packages (e.g. `clsx@2`).
 - Prop playground / knobs for the root component.
 
 ## Development
