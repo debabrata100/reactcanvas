@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { Transpiler, TranspileError } from './transpiler';
 import { extractSpecifiers } from './transpiler/moduleGraph';
 import { isBareSpecifier, normalizeSlashes } from './transpiler/pathResolver';
+import { collectPackages } from './transpiler/packages';
 import { HostMessage, RenderModule, ReactVersion, WebviewMessage } from './messages';
 
 const DEBOUNCE_MS = 300;
@@ -224,6 +225,7 @@ export class PreviewPanel {
         modules: RenderModule[];
         entryPath: string;
         css: string;
+        packages: string[];
         engine: 'esbuild' | 'babel';
         fileCount: number;
       };
@@ -252,6 +254,7 @@ export class PreviewPanel {
           modules: result.modules,
           entryPath: result.entryPath,
           css,
+          packages: result.packages,
           engine: result.engine,
           fileCount: result.files.length,
         };
@@ -265,6 +268,7 @@ export class PreviewPanel {
           modules: [{ path: 'entry', code: result.code, imports: {} }],
           entryPath: 'entry',
           css,
+          packages: collectPackages(extractSpecifiers(text)),
           engine: result.engine,
           fileCount: 1,
         };
@@ -279,6 +283,7 @@ export class PreviewPanel {
         modules: payload.modules,
         entryPath: payload.entryPath,
         css: payload.css,
+        packages: payload.packages,
         reactVersion: this.getReactVersion(),
         engine: payload.engine,
         fileCount: payload.fileCount,
@@ -306,13 +311,13 @@ export class PreviewPanel {
     // - User code never runs in this document; it runs inside a sandboxed
     //   srcdoc iframe (sandbox="allow-scripts", no allow-same-origin).
     // - srcdoc iframes inherit this CSP, so it must admit what the iframe
-    //   needs: nonce'd inline scripts, esm.sh (React), and blob: (the user
-    //   module is imported from a Blob URL).
+    //   needs: nonce'd inline scripts, esm.sh (React and npm packages), and
+    //   blob: (each user module is imported from a Blob URL).
     const csp = [
       `default-src 'none'`,
       `img-src ${webview.cspSource} https: data: blob:`,
-      `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `font-src ${webview.cspSource}`,
+      `style-src ${webview.cspSource} https://esm.sh 'unsafe-inline'`,
+      `font-src ${webview.cspSource} https://esm.sh data:`,
       `script-src 'nonce-${nonce}' https://esm.sh blob:`,
       `connect-src https://esm.sh`,
       `frame-src blob: data:`,

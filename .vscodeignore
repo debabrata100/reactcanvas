@@ -5,7 +5,7 @@
 src/**
 out/**
 node_modules/**
-images/README.md
+examples/**
 images/preview.gif
 esbuild.mjs
 eslint.config.mjs
@@ -18,4 +18,5 @@ tsconfig.json
 npm-debug.log*
 
 # Keep:
-# dist/** (bundle + esbuild.wasm), images/icon.png, README.md, LICENSE, package.json
+# dist/** (bundle + esbuild.wasm), images/icon.png, README.md, CHANGELOG.md,
+# LICENSE, package.json
