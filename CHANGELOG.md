@@ -3,6 +3,26 @@
 All notable changes to ReactCanvas are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Planned
+- Import maps for arbitrary npm packages via esm.sh
+- Source-mapped runtime stack traces
+
+## [0.4.0] — 2026-07-13
+
+### Added
+- **Multi-file preview**: relative imports are now followed and bundled into the preview. `import Card from './Card'`, folder `index` files, extensionless specifiers (`./Button` → `Button.tsx`), and imported `.css` files across the whole graph all work.
+- Live reload watches every file in the resolved import graph, so editing an imported component or stylesheet re-renders the preview.
+- The toolbar shows the file count (e.g. `via babel · 4 files`) when a preview spans multiple modules.
+
+### Changed
+- Multi-file previews transpile each file with `@babel/standalone` and let the browser's native ES module loader link them via blob URLs. Single-file previews keep using the faster esbuild path. (esbuild-wasm's in-process build can't service the plugin callbacks that graph bundling needs.)
+
+### Known limitations
+- Circular imports between modules aren't supported yet and surface as an error.
+- Only relative imports resolve; bare npm packages other than `react`/`react-dom` are still external (see Roadmap: esm.sh import maps).
+
 ## [0.3.0] — 2026-07-13
 
 ### Added
@@ -11,13 +31,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Consecutive duplicate messages collapse into a single row with a repeat count, and output is capped per render so a render loop can't flood the panel.
 - The panel opens automatically when a `warn` or `error` is logged, and clears on each re-render (matching devtools behaviour on reload).
 - **Resizable console**: drag the sash at the top of the panel (or its header) to change its height, double-click to maximize, and use the ⌃/⌄ button to maximize/restore. The panel size and open/closed state persist across sessions.
-
-## [Unreleased]
-
-### Planned
-- Multi-file import resolution (follow relative imports and bundle them into the preview)
-- Import maps for arbitrary npm packages via esm.sh
-- Source-mapped runtime stack traces
 
 ## [0.2.0] — 2026-07-13
 
@@ -40,7 +53,8 @@ Initial release.
 - Theme-aware preview chrome (light/dark).
 - Published to the VS Code Marketplace and Open VSX.
 
-[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/debabrata100/reactcanvas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/debabrata100/reactcanvas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/debabrata100/reactcanvas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/debabrata100/reactcanvas/releases/tag/v0.1.0

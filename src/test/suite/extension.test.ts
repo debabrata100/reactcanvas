@@ -3,6 +3,7 @@
  * @vscode/test-electron (`npm run test:integration`).
  */
 import * as assert from 'assert';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 const EXTENSION_ID = 'debabrata100.reactcanvas';
@@ -50,5 +51,15 @@ describe('ReactCanvas extension', function () {
     await vscode.window.showTextDocument(doc);
     await vscode.commands.executeCommand('reactcanvas.openPreview');
     await new Promise((r) => setTimeout(r, 500));
+  });
+
+  it('previews a saved multi-file component (relative imports) without throwing', async () => {
+    // examples/multi/App.jsx imports ./Card, ./data and ./app.css — this
+    // exercises the bundling path end to end against real files on disk.
+    const entry = path.resolve(__dirname, '../../../examples/multi/App.jsx');
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(entry));
+    await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand('reactcanvas.openPreview');
+    await new Promise((r) => setTimeout(r, 800));
   });
 });

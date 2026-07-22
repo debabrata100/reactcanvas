@@ -42,9 +42,42 @@ export interface TranspileResult {
   engine: 'esbuild' | 'babel';
 }
 
+/** Reads a workspace file by absolute path; resolves to undefined if absent. */
+export type FileReader = (absolutePath: string) => Promise<string | undefined>;
+
+export interface BundleOptions {
+  /** Absolute path of the entry file (any slash style). */
+  entryPath: string;
+  /** Current text of the entry (may differ from disk if the buffer is dirty). */
+  entrySource: string;
+  /** Loader for the entry when its name carries no extension (untitled). */
+  loader: 'jsx' | 'tsx';
+  /** Reads *other* files in the graph. The entry is supplied via entrySource. */
+  readFile: FileReader;
+}
+
+export interface BundleResult {
+  /** Transpiled modules in the graph; the browser links them via blob URLs. */
+  modules: GraphModule[];
+  /** Canonical path of the entry module (its key in `modules`). */
+  entryPath: string;
+  /** Concatenated CSS from every `.css` file imported anywhere in the graph. */
+  css: string;
+  /** Multi-file bundling uses @babel/standalone for reliable per-file transpile. */
+  engine: 'babel';
+  /** Every module file that was read, for live-reload watching. */
+  files: string[];
+}
+
 export interface Transpiler {
   readonly name: 'esbuild' | 'babel';
   transpile(source: string, options: TranspileOptions): Promise<TranspileResult>;
+  /**
+   * Bundle an entry and its relative imports into one module. Present only on
+   * the esbuild engine — @babel/standalone cannot follow imports, so callers
+   * fall back to single-file `transpile` when this is undefined.
+   */
+  bundle?(options: BundleOptions): Promise<BundleResult>;
 }
 
 function loaderFor(options: TranspileOptions): 'jsx' | 'tsx' {
@@ -77,6 +110,10 @@ export function hasDefaultExport(source: string): boolean {
 // Node >= 18 too (WebAssembly, TextEncoder, performance are all global),
 // which is exactly what lets us avoid shelling out to a child process.
 import * as esbuild from 'esbuild-wasm/lib/browser.js';
+import { candidatePaths, dirOf, isBareSpecifier, loaderForPath, normalizeSlashes, resolveFrom } from './pathResolver';
+import { extractSpecifiers, GraphModule, removeImport } from './moduleGraph';
+
+export type { GraphModule } from './moduleGraph';
 
 let esbuildInit: Promise<void> | undefined;
 
@@ -115,20 +152,155 @@ export function createEsbuildTranspiler(wasmModule: WebAssembly.Module): Transpi
         throw toTranspileError(err);
       }
     },
+
+    bundle: bundleWithBabel,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Multi-file bundling (graph walk)
+// ---------------------------------------------------------------------------
+//
+// Per-file transpilation uses @babel/standalone rather than esbuild-wasm.
+// esbuild-wasm's `worker: false` build (the only mode available in the
+// extension host) reliably serves a *single* transform, but repeated
+// transforms in one continuation can deadlock — its Go scheduler starves
+// without the macrotask boundaries a test runner happens to provide. Babel's
+// transform is synchronous pure JS, so walking a graph of N files is safe.
+
+type GraphLoader = 'jsx' | 'tsx' | 'ts' | 'js';
+
+function babelTransformFile(path: string, source: string, loader: GraphLoader): string {
+  const babel: typeof import('@babel/standalone') = require('@babel/standalone');
+  const isTs = loader === 'ts' || loader === 'tsx' || /\.tsx?$/i.test(path);
+  const isTsx = loader === 'tsx' || /\.tsx$/i.test(path) || (loader === 'jsx' && isTs);
+  const presets: Array<[string, Record<string, unknown>]> = [['react', { runtime: 'automatic' }]];
+  if (isTs) {
+    // onlyRemoveTypeImports keeps value imports that Babel might otherwise
+    // treat as unused, so the graph walk still sees every real dependency.
+    presets.push(['typescript', { isTSX: isTsx, allExtensions: true, onlyRemoveTypeImports: true }]);
+  }
+  const result = babel.transform(source, {
+    filename: path.split('/').pop() || path,
+    sourceType: 'module',
+    presets,
+  });
+  if (result?.code == null) {
+    throw new TranspileError('Babel produced no output', [{ message: `${path}: no output` }]);
+  }
+  return result.code;
+}
+
+async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
+  const entryPath = normalizeSlashes(options.entryPath);
+  const cssChunks: string[] = [];
+  const modules = new Map<string, GraphModule>();
+  const readFiles = new Set<string>([entryPath]);
+  const readCache = new Map<string, string | undefined>();
+
+  const read = async (path: string): Promise<string | undefined> => {
+    if (path === entryPath) {
+      return options.entrySource;
+    }
+    if (readCache.has(path)) {
+      return readCache.get(path);
+    }
+    const contents = await options.readFile(path);
+    readCache.set(path, contents);
+    return contents;
+  };
+
+  const resolveExisting = async (base: string): Promise<{ path: string; contents: string } | undefined> => {
+    for (const candidate of candidatePaths(base)) {
+      const contents = await read(candidate);
+      if (contents !== undefined) {
+        return { path: candidate, contents };
+      }
+    }
+    return undefined;
+  };
+
+  const queue: Array<{ path: string; source: string; loader: GraphLoader }> = [
+    { path: entryPath, source: options.entrySource, loader: options.loader },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (modules.has(current.path)) {
+      continue;
+    }
+    let code: string;
+    try {
+      code = babelTransformFile(current.path, current.source, current.loader);
+    } catch (err) {
+      if (err instanceof TranspileError) {
+        throw err;
+      }
+      const anyErr = err as { message?: string; loc?: { line: number; column: number } };
+      const base = current.path.split('/').pop();
+      const message = `${base}: ${(anyErr?.message ?? String(err)).replace(/^unknown file: /, '')}`;
+      throw new TranspileError(message, [
+        { message, line: anyErr?.loc?.line, column: anyErr?.loc != null ? anyErr.loc.column + 1 : undefined },
+      ]);
+    }
+
+    const imports: Record<string, string> = {};
+    for (const specifier of extractSpecifiers(current.source)) {
+      if (isBareSpecifier(specifier)) {
+        continue; // react, react-dom, … resolved by the iframe import map
+      }
+      const resolved = await resolveExisting(resolveFrom(dirOf(current.path), specifier));
+      if (!resolved) {
+        const base = current.path.split('/').pop();
+        throw new TranspileError(`Could not resolve import "${specifier}"`, [
+          { message: `${base}: cannot find module "${specifier}"` },
+        ]);
+      }
+      readFiles.add(resolved.path);
+
+      if (loaderForPath(resolved.path) === 'css') {
+        cssChunks.push(resolved.contents);
+        code = removeImport(code, specifier);
+        continue;
+      }
+      imports[specifier] = resolved.path;
+      const depLoader = loaderForPath(resolved.path);
+      queue.push({
+        path: resolved.path,
+        source: resolved.contents,
+        loader: depLoader === 'json' || depLoader === 'css' ? 'js' : depLoader,
+      });
+    }
+
+    modules.set(current.path, { path: current.path, code, imports });
+  }
+
+  return {
+    modules: [...modules.values()],
+    entryPath,
+    css: cssChunks.join('\n'),
+    engine: 'babel',
+    files: [...readFiles],
   };
 }
 
 function toTranspileError(err: unknown): TranspileError {
   const anyErr = err as {
     message?: string;
-    errors?: Array<{ text: string; location?: { line: number; column: number } | null }>;
+    errors?: Array<{ text: string; location?: { file?: string; line: number; column: number } | null }>;
   };
   if (Array.isArray(anyErr?.errors) && anyErr.errors.length > 0) {
-    const infos: TranspileErrorInfo[] = anyErr.errors.map((e) => ({
-      message: e.text,
-      line: e.location?.line,
-      column: e.location != null ? e.location.column + 1 : undefined,
-    }));
+    const infos: TranspileErrorInfo[] = anyErr.errors.map((e) => {
+      // For imported files (bundling), prefix the error with the file's base
+      // name so the overlay says *which* module failed, not just the line.
+      const file = e.location?.file ? e.location.file.split('/').pop() : undefined;
+      const message = file ? `${file}: ${e.text}` : e.text;
+      return {
+        message,
+        line: e.location?.line,
+        column: e.location != null ? e.location.column + 1 : undefined,
+      };
+    });
     return new TranspileError(infos[0].message, infos);
   }
   const message = anyErr?.message ?? String(err);
@@ -171,6 +343,7 @@ export function createBabelTranspiler(): Transpiler {
         ]);
       }
     },
+    bundle: bundleWithBabel,
   };
 }
 

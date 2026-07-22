@@ -28,6 +28,7 @@ I built this because I got tired of spinning up a whole Vite project just to che
 | Live preview | `ReactCanvas: Open Preview` opens a panel beside your editor |
 | Scratch files | `ReactCanvas: New React Scratch File` — a ready-to-edit component with live preview, no file on disk needed; unsaved/untitled files preview too |
 | In-memory transpile | esbuild-wasm (with automatic `@babel/standalone` fallback) — no Node child processes, no bundler config |
+| Multi-file components | Relative imports are followed and bundled — `import Card from './Card'`, folder `index` files, and imported `.css` all work. Live reload watches the whole graph |
 | Live reload | Re-renders ~300 ms after you stop typing |
 | React version selector | Switch between React 17, 18, and 19 (`ReactCanvas: Select React Version`), loaded from esm.sh via import maps; persisted per workspace and shown in the status bar |
 | Console panel | `console.log` & friends appear in a collapsible panel inside the preview — objects, arrays, Maps, errors and circular structures formatted devtools-style. Drag to resize, double-click to maximize; size persists |
@@ -62,13 +63,12 @@ None. No local React install, no build configuration.
 
 ## Known limitations
 
-- Only the active file is compiled: relative imports of other modules (`./utils`) are not resolved yet (see Roadmap).
-- npm package imports other than `react` / `react-dom` are not mapped.
+- npm package imports other than `react` / `react-dom` are not mapped yet (see Roadmap).
+- Circular imports between local modules aren't supported and surface as an error.
 - Runtime error stack traces reference compiled code, not original source lines.
 
 ## Roadmap
 
-- **v2: multi-file import resolution** — follow relative imports (`./Button`, `../hooks/useThing`) and bundle them into the preview.
 - Import maps for arbitrary npm packages via esm.sh.
 - Source-mapped runtime stack traces.
 - Prop playground / knobs for the root component.

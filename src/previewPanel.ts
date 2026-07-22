@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { Transpiler, TranspileError } from './transpiler';
-import { HostMessage, ReactVersion, WebviewMessage } from './messages';
+import { extractSpecifiers } from './transpiler/moduleGraph';
+import { isBareSpecifier, normalizeSlashes } from './transpiler/pathResolver';
+import { HostMessage, RenderModule, ReactVersion, WebviewMessage } from './messages';
 
 const DEBOUNCE_MS = 300;
 
@@ -64,6 +66,8 @@ export class PreviewPanel {
   private cssWatcher: vscode.FileSystemWatcher | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
   private updateSeq = 0;
+  /** Normalized paths of every file in the current import graph (reload set). */
+  private graphFiles = new Set<string>();
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -102,12 +106,15 @@ export class PreviewPanel {
       this.disposables
     );
 
-    // Live reload, debounced.
+    // Live reload, debounced. Re-render when the entry, its sibling CSS, or
+    // any file in the resolved import graph changes.
     vscode.workspace.onDidChangeTextDocument(
       (event) => {
+        const changed = normalizeSlashes(event.document.uri.fsPath);
         if (
           event.document === this.target ||
-          (this.target && event.document.uri.toString() === this.cssUri()?.toString())
+          (this.target && event.document.uri.toString() === this.cssUri()?.toString()) ||
+          this.graphFiles.has(changed)
         ) {
           this.scheduleUpdate();
         }
@@ -160,6 +167,19 @@ export class PreviewPanel {
     }
   }
 
+  /** Reads a graph file by normalized path: dirty buffer first, then disk. */
+  private async readWorkspaceFile(path: string): Promise<string | undefined> {
+    const open = vscode.workspace.textDocuments.find((d) => normalizeSlashes(d.uri.fsPath) === path);
+    if (open) {
+      return open.getText();
+    }
+    try {
+      return new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(path)));
+    } catch {
+      return undefined;
+    }
+  }
+
   private async readCss(): Promise<string> {
     const cssUri = this.cssUri();
     if (!cssUri) {
@@ -188,23 +208,80 @@ export class PreviewPanel {
       return;
     }
 
-    const fileName = this.target.fileName.split(/[\\/]/).pop() ?? this.target.fileName;
+    const target = this.target;
+    const fileName = target.fileName.split(/[\\/]/).pop() ?? target.fileName;
+    const text = target.getText();
+    const loader = loaderOf(target);
     try {
       const transpiler = await this.getTranspiler();
-      const [result, css] = await Promise.all([
-        transpiler.transpile(this.target.getText(), { filename: fileName, loader: loaderOf(this.target) }),
-        this.readCss(),
-      ]);
+
+      // Bundle when the file has any relative import; otherwise take the fast
+      // single-file path. Untitled files can't resolve relative paths.
+      const hasRelativeImports =
+        !target.isUntitled && extractSpecifiers(text).some((s) => !isBareSpecifier(s));
+
+      let payload: {
+        modules: RenderModule[];
+        entryPath: string;
+        css: string;
+        engine: 'esbuild' | 'babel';
+        fileCount: number;
+      };
+
+      if (hasRelativeImports && transpiler.bundle) {
+        const entryPath = normalizeSlashes(target.uri.fsPath);
+        const result = await transpiler.bundle({
+          entryPath,
+          entrySource: text,
+          loader,
+          readFile: (p) => this.readWorkspaceFile(p),
+        });
+        this.graphFiles = new Set(result.files.map(normalizeSlashes));
+
+        // Preserve same-name sibling CSS auto-injection (no import needed),
+        // unless that file was already pulled in via an explicit import.
+        let css = result.css;
+        const siblingPath = this.cssUri() ? normalizeSlashes(this.cssUri()!.fsPath) : undefined;
+        if (!siblingPath || !this.graphFiles.has(siblingPath)) {
+          const sibling = await this.readCss();
+          if (sibling) {
+            css = css ? `${css}\n${sibling}` : sibling;
+          }
+        }
+        payload = {
+          modules: result.modules,
+          entryPath: result.entryPath,
+          css,
+          engine: result.engine,
+          fileCount: result.files.length,
+        };
+      } else {
+        const [result, css] = await Promise.all([
+          transpiler.transpile(text, { filename: fileName, loader }),
+          this.readCss(),
+        ]);
+        this.graphFiles = new Set([normalizeSlashes(target.uri.fsPath)]);
+        payload = {
+          modules: [{ path: 'entry', code: result.code, imports: {} }],
+          entryPath: 'entry',
+          css,
+          engine: result.engine,
+          fileCount: 1,
+        };
+      }
+
       if (seq !== this.updateSeq) {
         return; // A newer update superseded this one.
       }
       this.post({
         type: 'render',
         fileName,
-        code: result.code,
-        css,
+        modules: payload.modules,
+        entryPath: payload.entryPath,
+        css: payload.css,
         reactVersion: this.getReactVersion(),
-        engine: result.engine,
+        engine: payload.engine,
+        fileCount: payload.fileCount,
       });
     } catch (err) {
       if (seq !== this.updateSeq) {

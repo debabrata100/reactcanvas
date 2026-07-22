@@ -3,8 +3,9 @@
  * extension host and runs it inside a sandboxed srcdoc iframe. User code
  * NEVER executes in this document.
  */
-import type { HostMessage, ReactVersion } from '../messages';
+import type { HostMessage, ReactVersion, RenderModule } from '../messages';
 import { serializeConsoleArg } from './consoleSerialize';
+import { rewriteSpecifier, topoSortModules } from '../transpiler/moduleGraph';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -396,7 +397,7 @@ function importMap(version: ReactVersion): Record<string, string> {
   return map;
 }
 
-function buildSrcdoc(code: string, css: string, version: ReactVersion): string {
+function buildSrcdoc(modules: RenderModule[], entryPath: string, css: string, version: ReactVersion): string {
   const isDark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
   const renderSnippet =
     version === '17'
@@ -458,10 +459,34 @@ function buildSrcdoc(code: string, css: string, version: ReactVersion): string {
       render() { return this.state.err ? null : this.props.children; }
     }
 
+    // --- module linking --------------------------------------------------
+    // Each module becomes its own blob URL; relative specifiers are rewritten
+    // to the blob URL of the module they resolve to, in dependency order, so
+    // the browser's native ES loader links the graph. Bare specifiers (react,
+    // react-dom) fall through to the import map above.
+    const rcModules = ${embed(modules)};
+    const rcEntryPath = ${embed(entryPath)};
+    const rewriteSpecifier = ${rewriteSpecifier.toString()};
+    const topoSortModules = ${topoSortModules.toString()};
+
     (async () => {
       try {
-        const url = URL.createObjectURL(new Blob([${embed(code)}], { type: 'text/javascript' }));
-        const mod = await import(url);
+        let ordered;
+        try {
+          ordered = topoSortModules(rcModules);
+        } catch (err) {
+          post({ type: 'runtime-error', message: String((err && err.message) || err) });
+          return;
+        }
+        const blobUrls = {};
+        for (const m of ordered) {
+          let moduleCode = m.code;
+          for (const spec of Object.keys(m.imports)) {
+            moduleCode = rewriteSpecifier(moduleCode, spec, blobUrls[m.imports[spec]]);
+          }
+          blobUrls[m.path] = URL.createObjectURL(new Blob([moduleCode], { type: 'text/javascript' }));
+        }
+        const mod = await import(blobUrls[rcEntryPath]);
         let Component = mod.default;
         let picked = 'default export';
         if (typeof Component !== 'function' && typeof Component !== 'object') {
@@ -501,7 +526,7 @@ function buildSrcdoc(code: string, css: string, version: ReactVersion): string {
 </html>`;
 }
 
-function render(code: string, css: string, version: ReactVersion): void {
+function render(modules: RenderModule[], entryPath: string, css: string, version: ReactVersion): void {
   emptyEl.style.display = 'none';
   // Each render creates a fresh realm, so old output no longer reflects the
   // running preview (devtools behaves the same way on reload).
@@ -510,7 +535,7 @@ function render(code: string, css: string, version: ReactVersion): void {
   iframe = document.createElement('iframe');
   // allow-scripts only: no same-origin, no forms, no popups, no top navigation.
   iframe.setAttribute('sandbox', 'allow-scripts');
-  iframe.srcdoc = buildSrcdoc(code, css, version);
+  iframe.srcdoc = buildSrcdoc(modules, entryPath, css, version);
   stageEl.insertBefore(iframe, overlayEl);
 }
 
@@ -524,9 +549,9 @@ function handleHostMessage(msg: HostMessage): void {
       persisted.render = msg;
       savePersistedState();
       fileEl.textContent = msg.fileName;
-      engineEl.textContent = `via ${msg.engine}`;
+      engineEl.textContent = msg.fileCount > 1 ? `via ${msg.engine} · ${msg.fileCount} files` : `via ${msg.engine}`;
       versionEl.textContent = `React ${msg.reactVersion}`;
-      render(msg.code, msg.css, msg.reactVersion);
+      render(msg.modules, msg.entryPath, msg.css, msg.reactVersion);
       // Keep the previous frame visible under the overlay until the new
       // one reports success; transpile is already validated, so just wait.
       break;

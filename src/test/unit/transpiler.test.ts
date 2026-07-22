@@ -14,6 +14,7 @@ import {
   TranspileError,
   Transpiler,
 } from '../../transpiler';
+import { rewriteSpecifier, topoSortModules } from '../../transpiler/moduleGraph';
 
 const WASM_PATH = path.resolve(__dirname, '../../../node_modules/esbuild-wasm/esbuild.wasm');
 
@@ -132,6 +133,93 @@ describe('transpiler', () => {
     it('falls back to babel when wasm is absent', async () => {
       const transpiler = await createTranspiler({});
       assert.strictEqual(transpiler.name, 'babel');
+    });
+  });
+
+  describe('bundle (multi-file)', function () {
+    this.timeout(30000);
+    let transpiler: Transpiler;
+
+    const vfs: Record<string, string> = {
+      '/proj/Button.jsx': `export default function Button({ children }) { return <button>{children}</button>; }`,
+      '/proj/theme.css': `button { color: rebeccapurple; }`,
+      '/proj/hooks/useCounter.ts': `import { useState } from 'react';\nexport function useCounter(): [number, () => void] { const [n, setN] = useState(0); return [n, () => setN(n + 1)]; }`,
+      '/proj/hooks/index.ts': `export { useCounter } from './useCounter';`,
+    };
+    const entrySource = [
+      `import Button from './Button';`,
+      `import { useCounter } from './hooks';`,
+      `import './theme.css';`,
+      `export default function App() { const [n, inc] = useCounter(); return <Button>{n}</Button>; }`,
+    ].join('\n');
+
+    before(async () => {
+      const wasm = await WebAssembly.compile(fs.readFileSync(WASM_PATH));
+      transpiler = createEsbuildTranspiler(wasm);
+    });
+
+    async function bundleApp() {
+      return transpiler.bundle!({
+        entryPath: '/proj/App.jsx',
+        entrySource,
+        loader: 'jsx',
+        readFile: async (p) => vfs[p],
+      });
+    }
+
+    it('resolves relative imports, index files and extensions', async () => {
+      const res = await bundleApp();
+      const names = res.files.map((f) => f.split('/').pop()).sort();
+      assert.deepStrictEqual(names, ['App.jsx', 'Button.jsx', 'index.ts', 'theme.css', 'useCounter.ts']);
+    });
+
+    it('collects CSS and strips its import', async () => {
+      const res = await bundleApp();
+      assert.ok(res.css.includes('rebeccapurple'));
+      const entry = res.modules.find((m) => m.path === res.entryPath)!;
+      assert.ok(!entry.code.includes('theme.css'));
+    });
+
+    it('records the import map and keeps bare imports out of it', async () => {
+      const res = await bundleApp();
+      const entry = res.modules.find((m) => m.path === res.entryPath)!;
+      assert.deepStrictEqual(Object.keys(entry.imports).sort(), ['./Button', './hooks']);
+      // A hook module keeps `react` as a bare (un-mapped) import.
+      const hook = res.modules.find((m) => m.path === '/proj/hooks/useCounter.ts')!;
+      assert.deepStrictEqual(hook.imports, {});
+      assert.ok(hook.code.includes('react'));
+    });
+
+    it('reports an unresolved import with the offending file', async () => {
+      await assert.rejects(
+        () =>
+          transpiler.bundle!({
+            entryPath: '/proj/Bad.jsx',
+            entrySource: `import x from './does-not-exist';\nexport default () => null;`,
+            loader: 'jsx',
+            readFile: async () => undefined,
+          }),
+        (err: unknown) => {
+          assert.ok(err instanceof TranspileError);
+          assert.match(err.errors[0].message, /Bad\.jsx.*does-not-exist/);
+          return true;
+        }
+      );
+    });
+
+    it('links into a runnable graph (topo + blob-style rewrite)', async () => {
+      const res = await bundleApp();
+      const ordered = topoSortModules(res.modules);
+      // Every dependency precedes the module that imports it.
+      const index = new Map(ordered.map((m, i) => [m.path, i]));
+      for (const m of res.modules) {
+        for (const target of Object.values(m.imports)) {
+          assert.ok(index.get(target)! < index.get(m.path)!, `${target} before ${m.path}`);
+        }
+      }
+      const entry = res.modules.find((m) => m.path === res.entryPath)!;
+      const rewritten = rewriteSpecifier(entry.code, './Button', 'blob:BUTTON');
+      assert.ok(rewritten.includes('blob:BUTTON'));
     });
   });
 
