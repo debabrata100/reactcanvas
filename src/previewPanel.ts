@@ -3,6 +3,7 @@ import { Transpiler, TranspileError } from './transpiler';
 import { extractSpecifiers } from './transpiler/moduleGraph';
 import { isBareSpecifier, normalizeSlashes } from './transpiler/pathResolver';
 import { collectPackages } from './transpiler/packages';
+import { buildContentSecurityPolicy } from './csp';
 import { HostMessage, RenderModule, ReactVersion, WebviewMessage } from './messages';
 
 const DEBOUNCE_MS = 300;
@@ -307,22 +308,7 @@ export class PreviewPanel {
     const nonce = getNonce();
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview.js'));
 
-    // CSP notes:
-    // - User code never runs in this document; it runs inside a sandboxed
-    //   srcdoc iframe (sandbox="allow-scripts", no allow-same-origin).
-    // - srcdoc iframes inherit this CSP, so it must admit what the iframe
-    //   needs: nonce'd inline scripts, esm.sh (React and npm packages), and
-    //   blob: (each user module is imported from a Blob URL).
-    const csp = [
-      `default-src 'none'`,
-      `img-src ${webview.cspSource} https: data: blob:`,
-      `style-src ${webview.cspSource} https://esm.sh 'unsafe-inline'`,
-      `font-src ${webview.cspSource} https://esm.sh data:`,
-      `script-src 'nonce-${nonce}' https://esm.sh blob:`,
-      `connect-src https://esm.sh`,
-      `frame-src blob: data:`,
-      `child-src blob: data:`,
-    ].join('; ');
+    const csp = buildContentSecurityPolicy(webview.cspSource, nonce);
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">

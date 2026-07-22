@@ -14,9 +14,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 - **npm package imports**: any bare import beyond `react`/`react-dom` (for example `import clsx from 'clsx'`) now resolves from [esm.sh](https://esm.sh) automatically, with no install step. Packages are marked `external` for React so they share the single React instance the preview already loaded — hooks and context work across package boundaries.
 - Package specifiers are collected across the whole import graph and added to the preview's import map; the content-security policy admits esm.sh for scripts, styles and fonts.
+- **Network access for components**: the preview's content-security policy now allows components to `fetch`, open WebSockets, or use EventSource against any HTTPS API (and `localhost` dev servers), so data-fetching hooks work.
 
 ### Known limitations
 - Packages resolve to their latest esm.sh version; explicit version pinning is not supported yet.
+- The preview iframe is sandboxed with an opaque origin, so its requests are sent with `Origin: null`. Public APIs that allow any origin work; APIs that reject a null origin will not.
 
 ## [0.4.0] — 2026-07-13
 

@@ -65,6 +65,7 @@ None. No local React install, no build configuration.
 ## Known limitations
 
 - npm packages are resolved to their latest version on esm.sh; specific version pinning isn't supported yet.
+- Components can call `fetch` and open WebSockets, but the sandboxed preview sends `Origin: null`, so an API must allow requests from any origin.
 - Circular imports between local modules aren't supported and surface as an error.
 - Runtime error stack traces reference compiled code, not original source lines.
 
