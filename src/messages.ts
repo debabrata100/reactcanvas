@@ -26,6 +26,8 @@ export type HostMessage =
       entryPath: string;
       /** Concatenated CSS from sibling/imported .css files. */
       css: string;
+      /** Third-party npm specifiers to map to esm.sh in the iframe. */
+      packages: string[];
       reactVersion: ReactVersion;
       engine: 'esbuild' | 'babel';
       /** Number of files in the graph, shown in the toolbar when > 1. */

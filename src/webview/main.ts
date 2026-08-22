@@ -6,6 +6,7 @@
 import type { HostMessage, ReactVersion, RenderModule } from '../messages';
 import { serializeConsoleArg } from './consoleSerialize';
 import { rewriteSpecifier, topoSortModules } from '../transpiler/moduleGraph';
+import { esmShUrl } from '../transpiler/packages';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -382,7 +383,7 @@ function embed(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
-function importMap(version: ReactVersion): Record<string, string> {
+function importMap(version: ReactVersion, packages: string[]): Record<string, string> {
   const map: Record<string, string> = {
     react: `https://esm.sh/react@${version}`,
     'react/jsx-runtime': `https://esm.sh/react@${version}/jsx-runtime`,
@@ -394,10 +395,22 @@ function importMap(version: ReactVersion): Record<string, string> {
   if (version !== '17') {
     map['react-dom/client'] = `https://esm.sh/react-dom@${version}/client?external=react`;
   }
+  // Third-party packages resolve to esm.sh, sharing the React above.
+  for (const specifier of packages) {
+    if (!(specifier in map)) {
+      map[specifier] = esmShUrl(specifier);
+    }
+  }
   return map;
 }
 
-function buildSrcdoc(modules: RenderModule[], entryPath: string, css: string, version: ReactVersion): string {
+function buildSrcdoc(
+  modules: RenderModule[],
+  entryPath: string,
+  css: string,
+  version: ReactVersion,
+  packages: string[]
+): string {
   const isDark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
   const renderSnippet =
     version === '17'
@@ -513,7 +526,7 @@ function buildSrcdoc(modules: RenderModule[], entryPath: string, css: string, ve
 <html>
 <head>
   <meta charset="UTF-8">
-  <script type="importmap" nonce="${nonce}">${JSON.stringify({ imports: importMap(version) })}</script>
+  <script type="importmap" nonce="${nonce}">${JSON.stringify({ imports: importMap(version, packages) })}</script>
   <style>
     :root { color-scheme: ${isDark ? 'dark' : 'light'}; }
     body { margin: 8px; font-family: system-ui, sans-serif; background: ${isDark ? '#1f1f1f' : '#ffffff'}; color: ${isDark ? '#e6e6e6' : '#1f1f1f'}; }
@@ -526,7 +539,13 @@ function buildSrcdoc(modules: RenderModule[], entryPath: string, css: string, ve
 </html>`;
 }
 
-function render(modules: RenderModule[], entryPath: string, css: string, version: ReactVersion): void {
+function render(
+  modules: RenderModule[],
+  entryPath: string,
+  css: string,
+  version: ReactVersion,
+  packages: string[]
+): void {
   emptyEl.style.display = 'none';
   // Each render creates a fresh realm, so old output no longer reflects the
   // running preview (devtools behaves the same way on reload).
@@ -535,7 +554,7 @@ function render(modules: RenderModule[], entryPath: string, css: string, version
   iframe = document.createElement('iframe');
   // allow-scripts only: no same-origin, no forms, no popups, no top navigation.
   iframe.setAttribute('sandbox', 'allow-scripts');
-  iframe.srcdoc = buildSrcdoc(modules, entryPath, css, version);
+  iframe.srcdoc = buildSrcdoc(modules, entryPath, css, version, packages);
   stageEl.insertBefore(iframe, overlayEl);
 }
 
@@ -551,7 +570,7 @@ function handleHostMessage(msg: HostMessage): void {
       fileEl.textContent = msg.fileName;
       engineEl.textContent = msg.fileCount > 1 ? `via ${msg.engine} · ${msg.fileCount} files` : `via ${msg.engine}`;
       versionEl.textContent = `React ${msg.reactVersion}`;
-      render(msg.modules, msg.entryPath, msg.css, msg.reactVersion);
+      render(msg.modules, msg.entryPath, msg.css, msg.reactVersion, msg.packages);
       // Keep the previous frame visible under the overlay until the new
       // one reports success; transpile is already validated, so just wait.
       break;

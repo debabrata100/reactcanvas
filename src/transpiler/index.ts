@@ -63,6 +63,8 @@ export interface BundleResult {
   entryPath: string;
   /** Concatenated CSS from every `.css` file imported anywhere in the graph. */
   css: string;
+  /** Third-party bare specifiers imported anywhere in the graph (for esm.sh). */
+  packages: string[];
   /** Multi-file bundling uses @babel/standalone for reliable per-file transpile. */
   engine: 'babel';
   /** Every module file that was read, for live-reload watching. */
@@ -112,6 +114,7 @@ export function hasDefaultExport(source: string): boolean {
 import * as esbuild from 'esbuild-wasm/lib/browser.js';
 import { candidatePaths, dirOf, isBareSpecifier, loaderForPath, normalizeSlashes, resolveFrom } from './pathResolver';
 import { extractSpecifiers, GraphModule, removeImport } from './moduleGraph';
+import { collectPackages } from './packages';
 
 export type { GraphModule } from './moduleGraph';
 
@@ -196,6 +199,7 @@ async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
   const cssChunks: string[] = [];
   const modules = new Map<string, GraphModule>();
   const readFiles = new Set<string>([entryPath]);
+  const packageSpecifiers = new Set<string>();
   const readCache = new Map<string, string | undefined>();
 
   const read = async (path: string): Promise<string | undefined> => {
@@ -247,7 +251,10 @@ async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
     const imports: Record<string, string> = {};
     for (const specifier of extractSpecifiers(current.source)) {
       if (isBareSpecifier(specifier)) {
-        continue; // react, react-dom, … resolved by the iframe import map
+        // Bare specifiers are resolved at runtime by the iframe import map:
+        // react/react-dom from the version selector, everything else esm.sh.
+        packageSpecifiers.add(specifier);
+        continue;
       }
       const resolved = await resolveExisting(resolveFrom(dirOf(current.path), specifier));
       if (!resolved) {
@@ -279,6 +286,7 @@ async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
     modules: [...modules.values()],
     entryPath,
     css: cssChunks.join('\n'),
+    packages: collectPackages(packageSpecifiers),
     engine: 'babel',
     files: [...readFiles],
   };

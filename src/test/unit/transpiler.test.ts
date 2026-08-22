@@ -141,7 +141,7 @@ describe('transpiler', () => {
     let transpiler: Transpiler;
 
     const vfs: Record<string, string> = {
-      '/proj/Button.jsx': `export default function Button({ children }) { return <button>{children}</button>; }`,
+      '/proj/Button.jsx': `import clsx from 'clsx';\nexport default function Button({ children }) { return <button className={clsx('btn')}>{children}</button>; }`,
       '/proj/theme.css': `button { color: rebeccapurple; }`,
       '/proj/hooks/useCounter.ts': `import { useState } from 'react';\nexport function useCounter(): [number, () => void] { const [n, setN] = useState(0); return [n, () => setN(n + 1)]; }`,
       '/proj/hooks/index.ts': `export { useCounter } from './useCounter';`,
@@ -150,7 +150,7 @@ describe('transpiler', () => {
       `import Button from './Button';`,
       `import { useCounter } from './hooks';`,
       `import './theme.css';`,
-      `export default function App() { const [n, inc] = useCounter(); return <Button>{n}</Button>; }`,
+      `export default function App() { const [n] = useCounter(); return <Button>{n}</Button>; }`,
     ].join('\n');
 
     before(async () => {
@@ -188,6 +188,12 @@ describe('transpiler', () => {
       const hook = res.modules.find((m) => m.path === '/proj/hooks/useCounter.ts')!;
       assert.deepStrictEqual(hook.imports, {});
       assert.ok(hook.code.includes('react'));
+    });
+
+    it('collects third-party packages while excluding react', async () => {
+      const res = await bundleApp();
+      // `clsx` (imported by Button) is a package; `react` is not listed.
+      assert.deepStrictEqual(res.packages, ['clsx']);
     });
 
     it('reports an unresolved import with the offending file', async () => {
