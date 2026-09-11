@@ -61,6 +61,14 @@ function commonSuite(name: string, make: () => Promise<Transpiler>): void {
       assert.ok(/jsx|createElement/i.test(result.code), 'uses a JSX factory');
     });
 
+    it('emits a source map referencing the original file', async () => {
+      const result = await transpiler.transpile(JSX_SOURCE, { filename: 'App.jsx' });
+      assert.ok(result.map, 'a source map is returned');
+      const parsed = JSON.parse(result.map!) as { sources: string[]; mappings: string };
+      assert.ok(parsed.sources.some((s) => s.includes('App.jsx')));
+      assert.ok(parsed.mappings.length > 0);
+    });
+
     it('transpiles TSX (types stripped)', async () => {
       const result = await transpiler.transpile(TSX_SOURCE, { filename: 'App.tsx' });
       assert.ok(!result.code.includes('interface'), 'TS types are stripped');
@@ -194,6 +202,17 @@ describe('transpiler', () => {
       const res = await bundleApp();
       // `clsx` (imported by Button) is a package; `react` is not listed.
       assert.deepStrictEqual(res.packages, ['clsx']);
+    });
+
+    it('attaches a source map (with the original file name) to each module', async () => {
+      const res = await bundleApp();
+      for (const mod of res.modules) {
+        assert.ok(mod.map, `module ${mod.path} has a source map`);
+        const parsed = JSON.parse(mod.map!) as { sources: string[]; mappings: string };
+        assert.ok(parsed.sources.length > 0 && parsed.mappings.length > 0);
+      }
+      const entry = res.modules.find((m) => m.path === res.entryPath)!;
+      assert.ok((JSON.parse(entry.map!) as { sources: string[] }).sources[0].includes('App.jsx'));
     });
 
     it('reports an unresolved import with the offending file', async () => {

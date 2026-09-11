@@ -33,7 +33,7 @@ I built this because I got tired of spinning up a whole Vite project just to che
 | Live reload | Re-renders ~300 ms after you stop typing |
 | React version selector | Switch between React 17, 18, and 19 (`ReactCanvas: Select React Version`), loaded from esm.sh via import maps; persisted per workspace and shown in the status bar |
 | Console panel | `console.log` & friends appear in a collapsible panel inside the preview — objects, arrays, Maps, errors and circular structures formatted devtools-style. Drag to resize, double-click to maximize; size persists |
-| Error overlay | Transpile errors (with line numbers) and runtime errors shown in the preview, not just the console |
+| Error overlay | Transpile errors (with line numbers) and runtime errors shown in the preview, not just the console. Runtime stack traces are source-mapped back to your original file and line |
 | Hooks & multiple components | `useState`, `useEffect`, etc. work out of the box; the default export is rendered as the root |
 | CSS support | Inline styles, plus a same-name `.css` file next to your component is injected automatically (`Button.jsx` → `Button.css`) |
 | Theme aware | Preview chrome follows your VS Code light/dark theme |
@@ -67,11 +67,9 @@ None. No local React install, no build configuration.
 - npm packages are resolved to their latest version on esm.sh; specific version pinning isn't supported yet.
 - Components can call `fetch` and open WebSockets, but the sandboxed preview sends `Origin: null`, so an API must allow requests from any origin.
 - Circular imports between local modules aren't supported and surface as an error.
-- Runtime error stack traces reference compiled code, not original source lines.
 
 ## Roadmap
 
-- Source-mapped runtime stack traces.
 - Version pinning for npm packages (e.g. `clsx@2`).
 - Prop playground / knobs for the root component.
 

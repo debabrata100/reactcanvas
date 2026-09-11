@@ -40,6 +40,8 @@ export interface TranspileResult {
   code: string;
   /** Which engine produced the output. */
   engine: 'esbuild' | 'babel';
+  /** Source map (v3 JSON string) mapping the output back to the source. */
+  map?: string;
 }
 
 /** Reads a workspace file by absolute path; resolves to undefined if absent. */
@@ -149,8 +151,9 @@ export function createEsbuildTranspiler(wasmModule: WebAssembly.Module): Transpi
           jsx: 'automatic',
           jsxImportSource: 'react',
           sourcefile: options.filename,
+          sourcemap: true,
         });
-        return { code: result.code, engine: 'esbuild' };
+        return { code: result.code, engine: 'esbuild', map: result.map };
       } catch (err) {
         throw toTranspileError(err);
       }
@@ -173,7 +176,7 @@ export function createEsbuildTranspiler(wasmModule: WebAssembly.Module): Transpi
 
 type GraphLoader = 'jsx' | 'tsx' | 'ts' | 'js';
 
-function babelTransformFile(path: string, source: string, loader: GraphLoader): string {
+function babelTransformFile(path: string, source: string, loader: GraphLoader): { code: string; map?: string } {
   const babel: typeof import('@babel/standalone') = require('@babel/standalone');
   const isTs = loader === 'ts' || loader === 'tsx' || /\.tsx?$/i.test(path);
   const isTsx = loader === 'tsx' || /\.tsx$/i.test(path) || (loader === 'jsx' && isTs);
@@ -183,15 +186,18 @@ function babelTransformFile(path: string, source: string, loader: GraphLoader): 
     // treat as unused, so the graph walk still sees every real dependency.
     presets.push(['typescript', { isTSX: isTsx, allExtensions: true, onlyRemoveTypeImports: true }]);
   }
+  const sourceFileName = path.split('/').pop() || path;
   const result = babel.transform(source, {
-    filename: path.split('/').pop() || path,
+    filename: sourceFileName,
     sourceType: 'module',
+    sourceMaps: true,
+    sourceFileName,
     presets,
   });
   if (result?.code == null) {
     throw new TranspileError('Babel produced no output', [{ message: `${path}: no output` }]);
   }
-  return result.code;
+  return { code: result.code, map: result.map ? JSON.stringify(result.map) : undefined };
 }
 
 async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
@@ -234,8 +240,9 @@ async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
       continue;
     }
     let code: string;
+    let map: string | undefined;
     try {
-      code = babelTransformFile(current.path, current.source, current.loader);
+      ({ code, map } = babelTransformFile(current.path, current.source, current.loader));
     } catch (err) {
       if (err instanceof TranspileError) {
         throw err;
@@ -279,7 +286,7 @@ async function bundleWithBabel(options: BundleOptions): Promise<BundleResult> {
       });
     }
 
-    modules.set(current.path, { path: current.path, code, imports });
+    modules.set(current.path, { path: current.path, code, imports, map });
   }
 
   return {
@@ -333,12 +340,14 @@ export function createBabelTranspiler(): Transpiler {
         const result = babel.transform(stripCssImports(source), {
           filename: options.filename,
           sourceType: 'module',
+          sourceMaps: true,
+          sourceFileName: options.filename,
           presets,
         });
         if (result?.code == null) {
           throw new Error('Babel produced no output');
         }
-        return { code: result.code, engine: 'babel' };
+        return { code: result.code, engine: 'babel', map: result.map ? JSON.stringify(result.map) : undefined };
       } catch (err) {
         const anyErr = err as { message?: string; loc?: { line: number; column: number } };
         const message = (anyErr?.message ?? String(err)).replace(/^unknown file: /, '');

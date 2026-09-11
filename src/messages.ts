@@ -13,6 +13,8 @@ export interface RenderModule {
   code: string;
   /** Relative specifier -> canonical path of the module it resolves to. */
   imports: Record<string, string>;
+  /** Source map (v3 JSON string) used to map runtime errors back to source. */
+  map?: string;
 }
 
 /** Extension host -> webview */

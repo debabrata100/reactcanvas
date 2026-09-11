@@ -6,6 +6,7 @@ src/**
 out/**
 node_modules/**
 examples/**
+docs/**
 images/preview.gif
 esbuild.mjs
 eslint.config.mjs
