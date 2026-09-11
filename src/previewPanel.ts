@@ -266,7 +266,7 @@ export class PreviewPanel {
         ]);
         this.graphFiles = new Set([normalizeSlashes(target.uri.fsPath)]);
         payload = {
-          modules: [{ path: 'entry', code: result.code, imports: {} }],
+          modules: [{ path: 'entry', code: result.code, imports: {}, map: result.map }],
           entryPath: 'entry',
           css,
           packages: collectPackages(extractSpecifiers(text)),

@@ -18,6 +18,8 @@ export interface GraphModule {
   code: string;
   /** Map of the original relative specifier -> canonical path it resolves to. */
   imports: Record<string, string>;
+  /** Source map (v3 JSON string) for translating runtime errors to source. */
+  map?: string;
 }
 
 const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

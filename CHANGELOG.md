@@ -6,8 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Planned
-- Source-mapped runtime stack traces
 - Version pinning for npm packages
+
+## [0.6.0] — 2026-07-13
+
+### Added
+- **Source-mapped runtime errors**: when a component throws, the error overlay now reports the failure at your original source line (e.g. `Boom.jsx:7:16`) instead of a compiled blob URL. Every module is transpiled with a source map, and stack frames are translated back to the source position.
+
+### Changed
+- The transpile and bundle pipeline emits a source map per module; the webview carries these and maps runtime stack traces using a small, dependency-free Source Map v3 reader (no `source-map` package).
+
+### Known limitations
+- Only runtime error *stack traces* are mapped; column-level accuracy depends on the transpiler's map.
 
 ## [0.5.0] — 2026-07-13
 
@@ -64,7 +74,8 @@ Initial release.
 - Theme-aware preview chrome (light/dark).
 - Published to the VS Code Marketplace and Open VSX.
 
-[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/debabrata100/reactcanvas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/debabrata100/reactcanvas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/debabrata100/reactcanvas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/debabrata100/reactcanvas/compare/v0.2.0...v0.3.0

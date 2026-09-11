@@ -7,6 +7,7 @@ import type { HostMessage, ReactVersion, RenderModule } from '../messages';
 import { serializeConsoleArg } from './consoleSerialize';
 import { rewriteSpecifier, topoSortModules } from '../transpiler/moduleGraph';
 import { esmShUrl } from '../transpiler/packages';
+import { RawSourceMap, remapStack } from '../sourceMap';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -34,6 +35,8 @@ interface IframeMessage {
   component?: string;
   level?: ConsoleLevel;
   text?: string;
+  /** Maps each "rcmodN" token in `stack` to the module path it came from. */
+  tokens?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +170,40 @@ const overlayBody = overlayEl.querySelector('.rc-body') as HTMLElement;
 versionEl.addEventListener('click', () => vscode.postMessage({ type: 'select-version' }));
 
 let iframe: HTMLIFrameElement | undefined;
+
+/** Modules from the most recent render, used to map runtime error stacks. */
+let currentModules: RenderModule[] = [];
+/** Cache of parsed source maps by module path (parsing JSON is not free). */
+const sourceMapCache = new Map<string, RawSourceMap | null>();
+
+function parseModuleMap(path: string): RawSourceMap | undefined {
+  if (sourceMapCache.has(path)) {
+    return sourceMapCache.get(path) ?? undefined;
+  }
+  const mod = currentModules.find((m) => m.path === path);
+  let parsed: RawSourceMap | null = null;
+  if (mod?.map) {
+    try {
+      parsed = JSON.parse(mod.map) as RawSourceMap;
+    } catch {
+      parsed = null;
+    }
+  }
+  sourceMapCache.set(path, parsed);
+  return parsed ?? undefined;
+}
+
+/** Rewrite an iframe stack's rcmodN tokens to original source positions. */
+function mapStack(stack: string | undefined, tokens: Record<string, string> | undefined): string {
+  if (!stack || !tokens) {
+    return stack ?? '';
+  }
+  const tokenToMap: Record<string, RawSourceMap | undefined> = {};
+  for (const [token, path] of Object.entries(tokens)) {
+    tokenToMap[token] = parseModuleMap(path);
+  }
+  return remapStack(stack, tokenToMap);
+}
 
 // ---------------------------------------------------------------------------
 // Console panel
@@ -448,12 +485,38 @@ function buildSrcdoc(
       };
     }
     // ---------------------------------------------------------------------
+    // --- stack tokenizing ------------------------------------------------
+    // Blob URLs are meaningless outside this iframe, and only this realm knows
+    // which URL is which module. So before sending a stack to the chrome, we
+    // replace each blob URL with a stable "rcmodN" token and tell the chrome
+    // which module path each token is — the chrome maps token+line back to the
+    // original source using that module's source map.
+    const rcUrlToToken = {};
+    const rcTokenToPath = {};
+    function rcTokenizeStack(stack) {
+      if (!stack) {
+        return { stack: stack, tokens: {} };
+      }
+      let text = String(stack);
+      const tokens = {};
+      for (const url in rcUrlToToken) {
+        if (text.indexOf(url) !== -1) {
+          const token = rcUrlToToken[url];
+          text = text.split(url).join(token);
+          tokens[token] = rcTokenToPath[token];
+        }
+      }
+      return { stack: text, tokens: tokens };
+    }
+
     window.addEventListener('error', (e) => {
-      post({ type: 'runtime-error', message: e.message, stack: e.error && e.error.stack, line: e.lineno, column: e.colno });
+      const t = rcTokenizeStack(e.error && e.error.stack);
+      post({ type: 'runtime-error', message: e.message, stack: t.stack, tokens: t.tokens });
     });
     window.addEventListener('unhandledrejection', (e) => {
       const r = e.reason;
-      post({ type: 'runtime-error', message: String((r && r.message) || r), stack: r && r.stack });
+      const t = rcTokenizeStack(r && r.stack);
+      post({ type: 'runtime-error', message: String((r && r.message) || r), stack: t.stack, tokens: t.tokens });
     });
 
     const css = ${embed(css)};
@@ -467,7 +530,8 @@ function buildSrcdoc(
       constructor(props) { super(props); this.state = { err: null }; }
       static getDerivedStateFromError(err) { return { err }; }
       componentDidCatch(err, info) {
-        post({ type: 'runtime-error', message: String((err && err.message) || err), stack: err && err.stack, componentStack: info && info.componentStack });
+        const t = rcTokenizeStack(err && err.stack);
+        post({ type: 'runtime-error', message: String((err && err.message) || err), stack: t.stack, tokens: t.tokens, componentStack: info && info.componentStack });
       }
       render() { return this.state.err ? null : this.props.children; }
     }
@@ -492,13 +556,18 @@ function buildSrcdoc(
           return;
         }
         const blobUrls = {};
-        for (const m of ordered) {
+        ordered.forEach((m, i) => {
           let moduleCode = m.code;
           for (const spec of Object.keys(m.imports)) {
             moduleCode = rewriteSpecifier(moduleCode, spec, blobUrls[m.imports[spec]]);
           }
-          blobUrls[m.path] = URL.createObjectURL(new Blob([moduleCode], { type: 'text/javascript' }));
-        }
+          const url = URL.createObjectURL(new Blob([moduleCode], { type: 'text/javascript' }));
+          blobUrls[m.path] = url;
+          // Register the URL↔token↔path mapping for stack tokenizing.
+          const token = 'rcmod' + i;
+          rcUrlToToken[url] = token;
+          rcTokenToPath[token] = m.path;
+        });
         const mod = await import(blobUrls[rcEntryPath]);
         let Component = mod.default;
         let picked = 'default export';
@@ -517,7 +586,8 @@ function buildSrcdoc(
         doRender(React.createElement(RCBoundary, null, React.createElement(Component)));
         post({ type: 'rendered', component: picked });
       } catch (err) {
-        post({ type: 'runtime-error', message: String((err && err.message) || err), stack: err && err.stack });
+        const t = rcTokenizeStack(err && err.stack);
+        post({ type: 'runtime-error', message: String((err && err.message) || err), stack: t.stack, tokens: t.tokens });
       }
     })();
   `;
@@ -547,6 +617,8 @@ function render(
   packages: string[]
 ): void {
   emptyEl.style.display = 'none';
+  currentModules = modules;
+  sourceMapCache.clear();
   // Each render creates a fresh realm, so old output no longer reflects the
   // running preview (devtools behaves the same way on reload).
   clearConsole();
@@ -607,12 +679,13 @@ function handleIframeMessage(msg: IframeMessage): void {
       appendConsoleEntry(msg.level ?? 'log', msg.text ?? '');
       break;
     case 'runtime-error': {
-      const loc = msg.line != null ? `<span class="rc-loc">line ${msg.line}${msg.column != null ? ':' + msg.column : ''} (compiled)</span>\n` : '';
-      const stack = msg.stack ? escapeHtml(msg.stack) : escapeHtml(msg.message ?? 'Unknown error');
+      // Translate blob-URL stack frames back to original source positions.
+      const mapped = mapStack(msg.stack, msg.tokens);
+      const stack = mapped ? escapeHtml(mapped) : escapeHtml(msg.message ?? 'Unknown error');
       const componentStack = msg.componentStack
         ? `<pre>Component stack:${escapeHtml(msg.componentStack)}</pre>`
         : '';
-      showOverlay('error', 'Runtime error', `<pre>${loc}${stack}</pre>${componentStack}`);
+      showOverlay('error', 'Runtime error', `<pre>${stack}</pre>${componentStack}`);
       break;
     }
     case 'no-component': {
