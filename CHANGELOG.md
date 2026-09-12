@@ -6,7 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Planned
-- Version pinning for npm packages
+- Prop playground / knobs for the root component
+
+## [0.7.0] — 2026-09-12
+
+### Added
+- **npm version pinning**: add `@version` to any import to pin a package — `import { format } from 'date-fns@3'`, `import x from '@mui/material@5/Button'`. Without a version, packages still resolve to latest.
+
+### Changed
+- Runtime error overlays now source-map React's **component stack** too, not just the JavaScript error stack — every frame points at your original file and line.
+- CI and release workflows run on Node 24 and updated action majors (`actions/checkout@v5`, `actions/setup-node@v5`, `actions/upload-artifact@v5`), off the deprecated Node 20 runtime.
 
 ## [0.6.0] — 2026-07-13
 
@@ -74,7 +83,8 @@ Initial release.
 - Theme-aware preview chrome (light/dark).
 - Published to the VS Code Marketplace and Open VSX.
 
-[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/debabrata100/reactcanvas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/debabrata100/reactcanvas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/debabrata100/reactcanvas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/debabrata100/reactcanvas/compare/v0.3.0...v0.4.0

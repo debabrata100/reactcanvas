@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { scaleLinear } from 'd3-scale';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns@3';
 
 // npm demo: `d3-scale` and `date-fns` are pulled from esm.sh automatically —
 // no install step. React is shared with these packages, so hooks work as
-// usual. Edit the data below and the preview live-reloads.
+// usual. Note `date-fns@3`: adding `@version` to any import pins that package
+// to a specific version. Edit the data below and the preview live-reloads.
 const SAMPLES = [12, 30, 45, 22, 60, 38, 51];
 
 export default function Chart() {
