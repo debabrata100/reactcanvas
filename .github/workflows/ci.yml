@@ -9,11 +9,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
 
       # npm ci needs a committed package-lock.json; fall back to install
       # until one exists. (Re-add `cache: npm` to setup-node then, too.)
@@ -43,7 +43,7 @@ jobs:
         run: npx @vscode/vsce package --out reactcanvas.vsix
 
       - name: Upload .vsix artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: reactcanvas-vsix
           path: reactcanvas.vsix

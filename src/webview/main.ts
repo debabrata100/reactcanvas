@@ -531,7 +531,14 @@ function buildSrcdoc(
       static getDerivedStateFromError(err) { return { err }; }
       componentDidCatch(err, info) {
         const t = rcTokenizeStack(err && err.stack);
-        post({ type: 'runtime-error', message: String((err && err.message) || err), stack: t.stack, tokens: t.tokens, componentStack: info && info.componentStack });
+        const c = rcTokenizeStack(info && info.componentStack);
+        post({
+          type: 'runtime-error',
+          message: String((err && err.message) || err),
+          stack: t.stack,
+          componentStack: c.stack,
+          tokens: Object.assign({}, t.tokens, c.tokens),
+        });
       }
       render() { return this.state.err ? null : this.props.children; }
     }
@@ -679,11 +686,12 @@ function handleIframeMessage(msg: IframeMessage): void {
       appendConsoleEntry(msg.level ?? 'log', msg.text ?? '');
       break;
     case 'runtime-error': {
-      // Translate blob-URL stack frames back to original source positions.
+      // Translate blob-URL frames back to original source positions in both
+      // the error stack and React's component stack.
       const mapped = mapStack(msg.stack, msg.tokens);
       const stack = mapped ? escapeHtml(mapped) : escapeHtml(msg.message ?? 'Unknown error');
       const componentStack = msg.componentStack
-        ? `<pre>Component stack:${escapeHtml(msg.componentStack)}</pre>`
+        ? `<pre>Component stack:${escapeHtml(mapStack(msg.componentStack, msg.tokens))}</pre>`
         : '';
       showOverlay('error', 'Runtime error', `<pre>${stack}</pre>${componentStack}`);
       break;
