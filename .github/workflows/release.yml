@@ -43,11 +43,25 @@ jobs:
             echo "::warning::VSCE_PAT secret not set — skipping Marketplace publish."
           fi
 
+      # Registry publishes occasionally time out (the gallery API can be
+      # flaky). Retry a few times, and don't fail the whole release — a GitHub
+      # Release with the .vsix is already created above, and Open VSX should
+      # still get a chance to publish even if the Marketplace is down.
       - name: Publish to VS Code Marketplace
         if: steps.pat.outputs.present == 'true'
+        continue-on-error: true
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish --packagePath reactcanvas-${{ github.ref_name }}.vsix
+        run: |
+          for attempt in 1 2 3; do
+            if npx @vscode/vsce publish --packagePath reactcanvas-${{ github.ref_name }}.vsix; then
+              exit 0
+            fi
+            echo "Marketplace publish attempt $attempt failed; retrying in 30s..."
+            sleep 30
+          done
+          echo "::error::Marketplace publish failed after 3 attempts."
+          exit 1
 
       - name: Check for Open VSX token
         id: ovsx
@@ -63,6 +77,16 @@ jobs:
 
       - name: Publish to Open VSX
         if: steps.ovsx.outputs.present == 'true'
+        continue-on-error: true
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx ovsx publish reactcanvas-${{ github.ref_name }}.vsix -p "$OVSX_PAT"
+        run: |
+          for attempt in 1 2 3; do
+            if npx ovsx publish reactcanvas-${{ github.ref_name }}.vsix -p "$OVSX_PAT"; then
+              exit 0
+            fi
+            echo "Open VSX publish attempt $attempt failed; retrying in 30s..."
+            sleep 30
+          done
+          echo "::error::Open VSX publish failed after 3 attempts."
+          exit 1
