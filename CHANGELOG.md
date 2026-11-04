@@ -8,6 +8,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Planned
 - Prop playground / knobs for the root component
 
+## [1.0.0] — 2026-10-07
+
+First stable release. ReactCanvas previews React components live inside VS Code — no dev server, no project build. The feature set is considered stable; breaking changes from here will come in a future major version.
+
+Everything shipped across 0.1–0.7 is included:
+
+- **Live preview** of `.jsx`/`.tsx` files (and unsaved scratch files) with ~300 ms debounced reload.
+- **In-memory transpilation** via esbuild-wasm, with an automatic `@babel/standalone` fallback.
+- **Multi-file components**: relative imports, folder `index` files, and imported `.css` are followed and bundled; live reload watches the whole graph.
+- **npm packages** from esm.sh with no install step, including version pinning (`date-fns@3`), sharing the preview's single React instance.
+- **React version selector** (17 / 18 / 19), persisted per workspace.
+- **Console panel** with devtools-style formatting, resizable and persistent.
+- **Source-mapped runtime errors**: both the error stack and React's component stack point at your original source line.
+- **Secure by design**: strict CSP with nonces; user code runs only in a sandboxed iframe.
+
+### Changed
+- Release workflow now retries registry publishes and no longer fails the whole release (or blocks Open VSX) if the Marketplace is temporarily unavailable.
+
 ## [0.7.0] — 2026-09-12
 
 ### Added
@@ -83,7 +101,8 @@ Initial release.
 - Theme-aware preview chrome (light/dark).
 - Published to the VS Code Marketplace and Open VSX.
 
-[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/debabrata100/reactcanvas/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/debabrata100/reactcanvas/compare/v0.7.0...v1.0.0
 [0.7.0]: https://github.com/debabrata100/reactcanvas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/debabrata100/reactcanvas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/debabrata100/reactcanvas/compare/v0.4.0...v0.5.0
